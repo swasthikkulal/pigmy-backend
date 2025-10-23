@@ -10,7 +10,7 @@ const collectorRoutes = require("./routes/collectors");
 const customerRoutes = require("./routes/customers");
 const accountRoutes = require("./routes/accounts");
 const planRoutes = require("./routes/plans");
-
+const authRoutes = require("./routes/auth");
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -25,6 +25,7 @@ app.get("/", async (req, res) => {
 });
 
 // app.use("/api/user", userRoutes);
+app.use('/api/auth', authRoutes);
 app.use("/api/collectors", collectorRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/accounts", accountRoutes);
