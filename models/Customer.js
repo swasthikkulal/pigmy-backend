@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const customerSchema = new mongoose.Schema({
   // Basic Personal Details
@@ -28,6 +29,8 @@ const customerSchema = new mongoose.Schema({
   },
   email: {
     type: String,
+    required: true, // Make email required for login
+    unique: true,
     trim: true,
     lowercase: true
   },
@@ -62,6 +65,19 @@ const customerSchema = new mongoose.Schema({
     required: true
   },
 
+  // Authentication Fields
+  password: {
+    type: String,
+    required: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  lastLogin: {
+    type: Date
+  },
+
   // System Fields
   status: {
     type: String,
@@ -82,6 +98,12 @@ const customerSchema = new mongoose.Schema({
   activeAccounts: {
     type: Number,
     default: 0
+  },
+  
+  // Reference to collector
+  collectorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Collector'
   }
 }, { 
   timestamps: true 
@@ -100,5 +122,35 @@ customerSchema.virtual('age').get(function() {
   }
   return age;
 });
+
+// Hash password (customerId) before saving
+customerSchema.pre('save', async function(next) {
+  // Only hash the password if it's modified (or new)
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Compare password method
+customerSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Remove password from JSON output
+customerSchema.methods.toJSON = function() {
+  const customer = this.toObject();
+  delete customer.password;
+  return customer;
+};
+
+// Ensure virtual fields are serialized
+customerSchema.set('toJSON', { virtuals: true });
+customerSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('Customer', customerSchema);

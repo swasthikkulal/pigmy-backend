@@ -5,12 +5,13 @@ const cors = require("cors");
 const connectDB = require("./config/database");
 
 // Import Routes
-// const userRoutes = require("./routes/userRoutes");
 const collectorRoutes = require("./routes/collectors");
 const customerRoutes = require("./routes/customers");
 const accountRoutes = require("./routes/accounts");
 const planRoutes = require("./routes/plans");
-const authRoutes = require("./routes/auth");
+const authRoutes = require("./routes/auth"); // Admin auth routes
+const customerAuthRoutes = require("./routes/customerAuth"); // Customer auth routes
+
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -24,12 +25,17 @@ app.get("/", async (req, res) => {
     res.send("Routes are working! 🚀");
 });
 
-// app.use("/api/user", userRoutes);
-app.use('/api/auth', authRoutes);
+// API Routes - CLEANED UP VERSION
+app.use("/api/auth", authRoutes); // Admin authentication
+app.use("/api/auth/customer", customerAuthRoutes); // Customer authentication
 app.use("/api/collectors", collectorRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/plans", planRoutes);
+
+// REMOVE these duplicate lines:
+// app.use('/api/users', require('./routes/users')); // ← Remove if not needed
+// app.use('/api/auth/user', require('./routes/customerAuth')); // ← This is duplicate!
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -41,7 +47,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Handle 404 - Fixed wildcard route
+// Handle 404
 app.use((req, res) => {
     res.status(404).json({
         success: false,
