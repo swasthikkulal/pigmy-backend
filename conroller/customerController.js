@@ -1,20 +1,16 @@
 const Customer = require('../models/Customer');
-const Collector = require('../models/Collector');
-const Plan = require('../models/Plan');
 
 // @desc    Get all customers
 // @route   GET /api/customers
 // @access  Public
 const getAllCustomers = async (req, res) => {
   try {
-    const { collector, status, page = 1, limit = 10 } = req.query;
+    const { status, page = 1, limit = 10 } = req.query;
     
     let query = {};
-    if (collector) query.collectorId = collector;
     if (status) query.status = status;
 
     const customers = await Customer.find(query)
-      .populate('collectorId', 'name collectorId area phone')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -43,8 +39,7 @@ const getAllCustomers = async (req, res) => {
 // @access  Public
 const getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
-      .populate('collectorId', 'name collectorId area phone');
+    const customer = await Customer.findById(req.params.id);
 
     if (!customer) {
       return res.status(404).json({
@@ -77,9 +72,7 @@ const createCustomer = async (req, res) => {
       email, 
       aadhaarNumber,
       panNumber,
-      collectorId,
-      planType,
-      dailyAmount 
+      dateOfBirth
     } = req.body;
 
     console.log('Creating customer with data:', req.body);
@@ -122,33 +115,8 @@ const createCustomer = async (req, res) => {
       }
     }
 
-    // Verify collector exists
-    const collector = await Collector.findById(collectorId);
-    if (!collector) {
-      return res.status(400).json({
-        success: false,
-        message: 'Collector not found'
-      });
-    }
-
-    // Get plan details for interest rate
-    const plan = await Plan.findOne({ type: planType, status: 'active' });
-    let interestRate = 5.0; // Default interest rate
-    
-    if (plan) {
-      interestRate = plan.interestRate;
-    }
-
-    // Validate daily amount
-    if (dailyAmount < 10) {
-      return res.status(400).json({
-        success: false,
-        message: 'Daily amount must be at least ₹10'
-      });
-    }
-
     // Age validation
-    const dob = new Date(req.body.dateOfBirth);
+    const dob = new Date(dateOfBirth);
     const today = new Date();
     const age = today.getFullYear() - dob.getFullYear();
     if (age < 18) {
@@ -158,21 +126,8 @@ const createCustomer = async (req, res) => {
       });
     }
 
-    // Create customer with auto-calculated interest rate
-    const customerData = {
-      ...req.body,
-      interestRate: interestRate
-    };
-
-    const customer = new Customer(customerData);
+    const customer = new Customer(req.body);
     const newCustomer = await customer.save();
-    
-    await newCustomer.populate('collectorId', 'name collectorId area phone');
-
-    // Update collector's customer count
-    await Collector.findByIdAndUpdate(collectorId, {
-      $inc: { totalCustomers: 1 }
-    });
 
     res.status(201).json({
       success: true,
@@ -212,7 +167,7 @@ const createCustomer = async (req, res) => {
 // @access  Public
 const updateCustomer = async (req, res) => {
   try {
-    const { customerId, phone, email, aadhaarNumber, panNumber, collectorId } = req.body;
+    const { customerId, phone, email, aadhaarNumber, panNumber } = req.body;
 
     // Check for duplicates (excluding current customer)
     if (customerId) {
@@ -267,22 +222,11 @@ const updateCustomer = async (req, res) => {
       }
     }
 
-    // If collector is being updated, verify new collector exists
-    if (collectorId) {
-      const collector = await Collector.findById(collectorId);
-      if (!collector) {
-        return res.status(400).json({
-          success: false,
-          message: 'Collector not found'
-        });
-      }
-    }
-
     const customer = await Customer.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('collectorId', 'name collectorId area phone');
+    );
 
     if (!customer) {
       return res.status(404).json({
@@ -314,35 +258,6 @@ const updateCustomer = async (req, res) => {
       });
     }
     
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
-
-// @desc    Get customers by collector
-// @route   GET /api/customers/collector/:collectorId
-// @access  Public
-const getCustomersByCollector = async (req, res) => {
-  try {
-    const { collectorId } = req.params;
-    const { status } = req.query;
-
-    let query = { collectorId };
-    if (status) query.status = status;
-
-    const customers = await Customer.find(query)
-      .populate('collectorId', 'name collectorId area phone')
-      .sort({ name: 1 });
-
-    res.status(200).json({
-      success: true,
-      count: customers.length,
-      data: customers
-    });
-  } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Server Error',
@@ -414,6 +329,5 @@ module.exports = {
   getCustomerById,
   createCustomer,
   updateCustomer,
-  getCustomersByCollector,
   updateCustomerSavings
 };

@@ -4,9 +4,11 @@ const {
     getAllAccounts,
     getAccountById,
     createAccount,
+    getAccountsByCustomer,
     addTransaction,
     getAccountTransactions,
     updateAccountStatus,
+    updateAccount,
     getAccountStats
 } = require('../conroller/accountController');
 
@@ -17,8 +19,12 @@ router.route('/')
 router.route('/stats/overview')
     .get(getAccountStats);
 
+router.route('/customer/:customerId')
+    .get(getAccountsByCustomer);
+
 router.route('/:id')
-    .get(getAccountById);
+    .get(getAccountById)
+    .put(updateAccount);
 
 router.route('/:id/transaction')
     .post(addTransaction);

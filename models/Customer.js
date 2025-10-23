@@ -46,36 +46,6 @@ const customerSchema = new mongoose.Schema({
     uppercase: true
   },
 
-  // Pigmy Account Details
-  planType: {
-    type: String,
-    enum: ['daily', 'weekly', 'monthly'],
-    required: true
-  },
-  dailyAmount: {
-    type: Number,
-    required: true,
-    min: 10
-  },
-  startDate: {
-    type: Date,
-    default: Date.now
-  },
-  interestRate: {
-    type: Number,
-    required: true
-  },
-  depositMode: {
-    type: String,
-    enum: ['cash', 'online', 'both'],
-    default: 'cash'
-  },
-  collectorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Collector',
-    required: true
-  },
-
   // Nominee Details
   nomineeName: {
     type: String,
@@ -104,6 +74,14 @@ const customerSchema = new mongoose.Schema({
   },
   lastCollectionDate: {
     type: Date
+  },
+  totalAccounts: {
+    type: Number,
+    default: 0
+  },
+  activeAccounts: {
+    type: Number,
+    default: 0
   }
 }, { 
   timestamps: true 
