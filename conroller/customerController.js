@@ -16,7 +16,7 @@ const getAllCustomers = async (req, res) => {
       .skip((page - 1) * limit);
 
     const total = await Customer.countDocuments(query);
-
+    
     res.status(200).json({
       success: true,
       count: customers.length,
