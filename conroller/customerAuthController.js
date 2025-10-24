@@ -75,6 +75,89 @@ const generateToken = (id) => {
 //   }
 // };
 
+// const loginCustomer = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     console.log('🔐 Login attempt:', { email, password });
+
+//     // Check if email and password are provided
+//     if (!email || !password) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Please provide email and password'
+//       });
+//     }
+
+//     // Check if customer exists and is active
+//     const customer = await Customer.findOne({ 
+//       email: email.toLowerCase()
+//     }).populate('collectorId', 'name phone area');
+
+//     console.log('📋 Found customer:', customer ? {
+//       id: customer._id,
+//       email: customer.email,
+//       customerId: customer.customerId,
+//       status: customer.status,
+//       hasPassword: !!customer.password
+//     } : 'No customer found');
+
+//     if (!customer) {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'Invalid credentials or account not active'
+//       });
+//     }
+
+//     if (customer.status !== 'active') {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'Account is not active'
+//       });
+//     }
+
+//     // Check password (customer should use their Customer ID as password)
+//     console.log('🔑 Checking password...');
+//     const isPasswordMatch = await customer.comparePassword(password);
+//     console.log('Password match:', isPasswordMatch);
+
+//     if (!isPasswordMatch) {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'Invalid credentials - Use your Customer ID as password'
+//       });
+//     }
+
+//     // Update last login
+//     customer.lastLogin = new Date();
+//     await customer.save();
+
+//     const token = generateToken(customer._id);
+
+//     console.log('✅ Login successful for:', customer.email);
+
+//     res.status(200).json({
+//       success: true,
+//       message: 'Login successful',
+//       data: {
+//         _id: customer._id,
+//         customerId: customer.customerId,
+//         name: customer.name,
+//         email: customer.email,
+//         phone: customer.phone,
+//         collector: customer.collectorId,
+//         token
+//       }
+//     });
+//   } catch (error) {
+//     console.error('❌ Error logging in customer:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Server Error',
+//       error: error.message
+//     });
+//   }
+// };
 const loginCustomer = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -89,10 +172,12 @@ const loginCustomer = async (req, res) => {
       });
     }
 
-    // Check if customer exists and is active
+    // Find customer WITHOUT triggering full document validation
     const customer = await Customer.findOne({ 
       email: email.toLowerCase()
-    }).populate('collectorId', 'name phone area');
+    })
+    .select('+password') // Make sure password is included
+    .populate('collectorId', 'name phone area');
 
     console.log('📋 Found customer:', customer ? {
       id: customer._id,
@@ -128,9 +213,15 @@ const loginCustomer = async (req, res) => {
       });
     }
 
-    // Update last login
-    customer.lastLogin = new Date();
-    await customer.save();
+    // Update last login WITHOUT triggering validation
+    // Use updateOne instead of save() to avoid validation
+    await Customer.updateOne(
+      { _id: customer._id },
+      { 
+        lastLogin: new Date(),
+        $inc: { __v: 1 } // Optional: increment version to avoid conflicts
+      }
+    );
 
     const token = generateToken(customer._id);
 

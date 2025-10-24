@@ -11,6 +11,7 @@ const accountRoutes = require("./routes/accounts");
 const planRoutes = require("./routes/plans");
 const authRoutes = require("./routes/auth"); // Admin auth routes
 const customerAuthRoutes = require("./routes/customerAuth"); // Customer auth routes
+const paymentRoutes = require("./routes/paymentRoutes");
 
 // Middleware
 app.use(express.json());
@@ -32,6 +33,7 @@ app.use("/api/collectors", collectorRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/plans", planRoutes);
+app.use('/api/payments', paymentRoutes); 
 
 // REMOVE these duplicate lines:
 // app.use('/api/users', require('./routes/users')); // ← Remove if not needed
