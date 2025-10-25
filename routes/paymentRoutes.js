@@ -1,3 +1,4 @@
+// routes/paymentRoutes.js
 const express = require('express');
 const router = express.Router();
 const { protect: adminProtect, authorize } = require('../middleware/authMiddleware');
@@ -8,7 +9,7 @@ console.log('=== DEBUGGING PAYMENT CONTROLLER ===');
 // Debug the controller import
 let paymentController;
 try {
-  paymentController = require('../conroller/paymentController'); // Fixed typo
+  paymentController = require('../conroller/paymentController'); // Make sure path is correct
   console.log('✓ Payment controller imported successfully');
   console.log('Controller object keys:', Object.keys(paymentController));
   
@@ -21,15 +22,34 @@ try {
   ];
   
   requiredFunctions.forEach(func => {
-    console.log(`${func}:`, typeof paymentController[func]);
+    if (typeof paymentController[func] !== 'function') {
+      console.warn(`⚠️ Missing function: ${func}`);
+      // Create a dummy function for missing ones
+      paymentController[func] = (req, res) => res.status(501).json({ 
+        success: false, 
+        message: `Function ${func} not implemented` 
+      });
+    } else {
+      console.log(`✓ ${func}: function`);
+    }
   });
   
 } catch (error) {
   console.log('✗ Error importing payment controller:', error.message);
   // Create dummy controller as fallback
   paymentController = {};
+  const requiredFunctions = [
+    'processPayment', 'getPaymentHistory', 'getMyPayments', 'getAllPayments',
+    'getPendingPayments', 'getPaymentStats', 'getPaymentById', 'updatePaymentStatus',
+    'verifyPayment', 'deletePayment', 'bulkVerifyPayments', 'bulkCreatePayments',
+    'getDailyCollections', 'getMonthlySummary'
+  ];
+  
   requiredFunctions.forEach(func => {
-    paymentController[func] = (req, res) => res.json({ message: `Dummy ${func}` });
+    paymentController[func] = (req, res) => res.status(500).json({ 
+      success: false, 
+      message: `Controller not loaded: ${func}` 
+    });
   });
 }
 
@@ -45,7 +65,7 @@ console.log('=== SETTING UP ROUTES ===');
 // Customer routes - protected by customer auth
 router.post('/process', customerProtect, paymentController.processPayment);
 router.get('/customer/my-payments', customerProtect, paymentController.getMyPayments);
-router.get('/history/account/:accountId', customerProtect, paymentController.getPaymentHistory);
+router.get('/account/:accountId/history', customerProtect, paymentController.getPaymentHistory);
 
 // Admin/Collector routes - protected by admin auth
 router.get('/', adminProtect, authorize(['admin', 'collector']), paymentController.getAllPayments);
