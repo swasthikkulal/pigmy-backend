@@ -281,7 +281,8 @@ exports.getPaymentStats = async (req, res) => {
         
         const cashPayments = await Payment.countDocuments({ 
             status: 'completed', 
-            paymentMethod: 'cash' 
+            paymentMethod: 'cash',
+             
         });
         const onlinePayments = await Payment.countDocuments({ 
             status: 'completed', 
