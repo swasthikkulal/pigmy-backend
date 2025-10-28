@@ -1,5 +1,9 @@
 const Collector = require('../models/Collector');
 const Customer = require('../models/Customer');
+const Payment = require('../models/Payment');
+const Withdrawal = require('../models/Withdrawal');
+const Feedback = require('../models/Feedback');
+const Statement = require('../models/Statement');
 
 // @desc    Get all collectors
 // @route   GET /api/collectors
@@ -60,6 +64,63 @@ const getCollectorById = async (req, res) => {
 // @desc    Create new collector
 // @route   POST /api/collectors
 // @access  Public
+// const createCollector = async (req, res) => {
+//     try {
+//         const { collectorId, email, phone } = req.body;
+
+//         // Check if collector ID already exists
+//         const existingCollectorId = await Collector.findOne({ collectorId });
+//         if (existingCollectorId) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Collector ID already exists'
+//             });
+//         }
+
+//         // Check if email already exists
+//         const existingEmail = await Collector.findOne({ email });
+//         if (existingEmail) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Email already exists'
+//             });
+//         }
+
+//         // Check if phone already exists
+//         const existingPhone = await Collector.findOne({ phone });
+//         if (existingPhone) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Phone number already exists'
+//             });
+//         }
+
+//         const collector = new Collector(req.body);
+//         const newCollector = await collector.save();
+
+//         res.status(201).json({
+//             success: true,
+//             message: 'Collector created successfully',
+//             data: newCollector
+//         });
+//     } catch (error) {
+//         if (error.name === 'ValidationError') {
+//             const messages = Object.values(error.errors).map(val => val.message);
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Validation Error',
+//                 errors: messages
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
+
 const createCollector = async (req, res) => {
     try {
         const { collectorId, email, phone } = req.body;
@@ -91,7 +152,13 @@ const createCollector = async (req, res) => {
             });
         }
 
-        const collector = new Collector(req.body);
+        // SIMPLE FIX: Auto-set password to phone number
+        const collectorData = {
+            ...req.body,
+            password: req.body.phone // Set password = phone number
+        };
+
+        const collector = new Collector(collectorData);
         const newCollector = await collector.save();
 
         res.status(201).json({
@@ -120,6 +187,90 @@ const createCollector = async (req, res) => {
 // @desc    Update collector
 // @route   PUT /api/collectors/:id
 // @access  Public
+// const updateCollector = async (req, res) => {
+//     try {
+//         const { collectorId, email, phone } = req.body;
+
+//         // Check for duplicate collector ID (excluding current collector)
+//         if (collectorId) {
+//             const existingCollectorId = await Collector.findOne({
+//                 collectorId,
+//                 _id: { $ne: req.params.id }
+//             });
+//             if (existingCollectorId) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'Collector ID already exists'
+//                 });
+//             }
+//         }
+
+//         // Check for duplicate email (excluding current collector)
+//         if (email) {
+//             const existingEmail = await Collector.findOne({
+//                 email,
+//                 _id: { $ne: req.params.id }
+//             });
+//             if (existingEmail) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'Email already exists'
+//                 });
+//             }
+//         }
+
+//         // Check for duplicate phone (excluding current collector)
+//         if (phone) {
+//             const existingPhone = await Collector.findOne({
+//                 phone,
+//                 _id: { $ne: req.params.id }
+//             });
+//             if (existingPhone) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'Phone number already exists'
+//                 });
+//             }
+//         }
+
+//         const collector = await Collector.findByIdAndUpdate(
+//             req.params.id,
+//             req.body,
+//             {
+//                 new: true,
+//                 runValidators: true
+//             }
+//         );
+
+//         if (!collector) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Collector not found'
+//             });
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             message: 'Collector updated successfully',
+//             data: collector
+//         });
+//     } catch (error) {
+//         if (error.name === 'ValidationError') {
+//             const messages = Object.values(error.errors).map(val => val.message);
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Validation Error',
+//                 errors: messages
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
 const updateCollector = async (req, res) => {
     try {
         const { collectorId, email, phone } = req.body;
@@ -166,9 +317,15 @@ const updateCollector = async (req, res) => {
             }
         }
 
+        // SIMPLE FIX: If phone is updated, also update password
+        const updateData = { ...req.body };
+        if (phone) {
+            updateData.password = phone; // Keep password in sync with phone
+        }
+
         const collector = await Collector.findByIdAndUpdate(
             req.params.id,
-            req.body,
+            updateData,
             {
                 new: true,
                 runValidators: true
@@ -293,11 +450,388 @@ const getCollectorStats = async (req, res) => {
     }
 };
 
+// ==================== COLLECTOR FUNCTIONALITY METHODS ====================
+
+// @desc    Get my customers
+// @route   GET /api/collectors/my/customers
+// @access  Private (Collector)
+const getMyCustomers = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, search } = req.query;
+        
+        let query = { collectorId: req.collector._id };
+        
+        // Add search functionality
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const customers = await Customer.find(query)
+            .select('name phone email address totalSavings lastPaymentDate status')
+            .sort({ name: 1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        const total = await Customer.countDocuments(query);
+
+        // Get today's collections count
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todaysCollections = await Payment.countDocuments({
+            collectedBy: req.collector._id,
+            paymentDate: { $gte: today }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: customers,
+            stats: {
+                totalCustomers: total,
+                todaysCollections
+            },
+            pagination: {
+                current: page,
+                pages: Math.ceil(total / limit),
+                total,
+            },
+        });
+    } catch (error) {
+        console.error('Get my customers error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get my collections
+// @route   GET /api/collectors/my/collections
+// @access  Private (Collector)
+const getMyCollections = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, status, startDate, endDate } = req.query;
+        
+        let query = { collectedBy: req.collector._id };
+        if (status) query.status = status;
+
+        // Date range filter
+        if (startDate || endDate) {
+            query.paymentDate = {};
+            if (startDate) query.paymentDate.$gte = new Date(startDate);
+            if (endDate) query.paymentDate.$lte = new Date(endDate);
+        }
+
+        const collections = await Payment.find(query)
+            .populate('accountId', 'accountNumber accountType')
+            .populate('customerId', 'name phone address')
+            .sort({ paymentDate: -1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        const total = await Payment.countDocuments(query);
+
+        // Calculate totals
+        const totalAmount = await Payment.aggregate([
+            { $match: query },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: collections,
+            summary: {
+                totalAmount: totalAmount[0]?.total || 0,
+                totalCollections: total
+            },
+            pagination: {
+                current: page,
+                pages: Math.ceil(total / limit),
+                total,
+            },
+        });
+    } catch (error) {
+        console.error('Get my collections error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get my withdrawal requests
+// @route   GET /api/collectors/my/withdrawals
+// @access  Private (Collector)
+const getMyWithdrawalRequests = async (req, res) => {
+    try {
+        const { status, page = 1, limit = 10 } = req.query;
+        
+        let query = {};
+        if (status) query.status = status;
+
+        // Get customers assigned to this collector
+        const myCustomers = await Customer.find({ collectorId: req.collector._id });
+        const customerIds = myCustomers.map(customer => customer._id);
+
+        query.customerId = { $in: customerIds };
+
+        const withdrawals = await Withdrawal.find(query)
+            .populate('accountId', 'accountNumber accountType')
+            .populate('customerId', 'name phone address')
+            .sort({ createdAt: -1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        const total = await Withdrawal.countDocuments(query);
+
+        res.status(200).json({
+            success: true,
+            data: withdrawals,
+            pagination: {
+                current: page,
+                pages: Math.ceil(total / limit),
+                total,
+            },
+        });
+    } catch (error) {
+        console.error('Get my withdrawals error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get my statements
+// @route   GET /api/collectors/my/statements
+// @access  Private (Collector)
+const getMyStatements = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, type } = req.query;
+        
+        let query = { generatedBy: req.collector._id };
+        if (type) query.type = type;
+
+        const statements = await Statement.find(query)
+            .populate('accountId', 'accountNumber accountType')
+            .populate('customerId', 'name phone')
+            .sort({ createdAt: -1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        const total = await Statement.countDocuments(query);
+
+        res.status(200).json({
+            success: true,
+            data: statements,
+            pagination: {
+                current: page,
+                pages: Math.ceil(total / limit),
+                total,
+            },
+        });
+    } catch (error) {
+        console.error('Get my statements error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get my feedback
+// @route   GET /api/collectors/my/feedback
+// @access  Private (Collector)
+const getMyFeedback = async (req, res) => {
+    try {
+        const { status, type, page = 1, limit = 10 } = req.query;
+        
+        let query = { assignedTo: req.collector._id };
+        if (status) query.status = status;
+        if (type) query.type = type;
+
+        const feedback = await Feedback.find(query)
+            .populate('customerId', 'name phone email')
+            .sort({ createdAt: -1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        const total = await Feedback.countDocuments(query);
+
+        res.status(200).json({
+            success: true,
+            data: feedback,
+            pagination: {
+                current: page,
+                pages: Math.ceil(total / limit),
+                total,
+            },
+        });
+    } catch (error) {
+        console.error('Get my feedback error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Update collection status
+// @route   PATCH /api/collectors/collection/:id/status
+// @access  Private (Collector)
+const updateCollectionStatus = async (req, res) => {
+    try {
+        const { status, remarks } = req.body;
+        const { id } = req.params;
+
+        const payment = await Payment.findById(id);
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found',
+            });
+        }
+
+        // Verify collector owns this payment
+        if (payment.collectedBy.toString() !== req.collector._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to update this payment',
+            });
+        }
+
+        payment.status = status;
+        if (remarks) payment.remarks = remarks;
+        await payment.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment status updated successfully',
+            data: payment,
+        });
+    } catch (error) {
+        console.error('Update collection status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get collector dashboard stats
+// @route   GET /api/collectors/my/dashboard
+// @access  Private (Collector)
+const getCollectorDashboard = async (req, res) => {
+    try {
+        const collectorId = req.collector._id;
+
+        // Today's date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Get customer stats
+        const totalCustomers = await Customer.countDocuments({ collectorId });
+        const activeCustomers = await Customer.countDocuments({ 
+            collectorId, 
+            status: 'active' 
+        });
+
+        // Get collection stats
+        const totalCollections = await Payment.countDocuments({ collectedBy: collectorId });
+        const todaysCollections = await Payment.countDocuments({
+            collectedBy: collectorId,
+            paymentDate: { $gte: today, $lt: tomorrow }
+        });
+
+        // Get amount stats
+        const totalAmount = await Payment.aggregate([
+            { $match: { collectedBy: collectorId } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]);
+
+        const todaysAmount = await Payment.aggregate([
+            { 
+                $match: { 
+                    collectedBy: collectorId,
+                    paymentDate: { $gte: today, $lt: tomorrow }
+                } 
+            },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]);
+
+        // Get pending withdrawals
+        const pendingWithdrawals = await Withdrawal.countDocuments({
+            status: 'pending',
+            customerId: { 
+                $in: await Customer.find({ collectorId }).distinct('_id') 
+            }
+        });
+
+        // Get open feedback
+        const openFeedback = await Feedback.countDocuments({
+            assignedTo: collectorId,
+            status: 'open'
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                customerStats: {
+                    total: totalCustomers,
+                    active: activeCustomers
+                },
+                collectionStats: {
+                    total: totalCollections,
+                    today: todaysCollections,
+                    totalAmount: totalAmount[0]?.total || 0,
+                    todaysAmount: todaysAmount[0]?.total || 0
+                },
+                pendingTasks: {
+                    withdrawals: pendingWithdrawals,
+                    feedback: openFeedback
+                },
+                collector: {
+                    name: req.collector.name,
+                    area: req.collector.area,
+                    collectorId: req.collector.collectorId
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get collector dashboard error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message,
+        });
+    }
+};
+
 module.exports = {
     getAllCollectors,
     getCollectorById,
     createCollector,
     updateCollector,
     deleteCollector,
-    getCollectorStats
+    getCollectorStats,
+    // New collector functionality methods
+    getMyCustomers,
+    getMyCollections,
+    getMyWithdrawalRequests,
+    getMyStatements,
+    getMyFeedback,
+    updateCollectionStatus,
+    getCollectorDashboard
 };

@@ -87,25 +87,226 @@ const getAccountById = async (req, res) => {
 // @desc    Create new account
 // @route   POST /api/accounts
 // @access  Public
+// const createAccount = async (req, res) => {
+//     try {
+//         const { accountNumber, accountId, customerId, collectorId, planId } = req.body;
+// console.log(req.body)
+// console.log("hello")
+//         // Check if account number already exists
+//         const existingAccountByNumber = await Account.findOne({ accountNumber });
+//         if (existingAccountByNumber) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Account number already exists'
+//             });
+//         }
+
+//         // Check if account ID already exists
+//         const existingAccountById = await Account.findOne({ accountId });
+//         if (existingAccountById) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Account ID already exists'
+//             });
+//         }
+
+//         // Verify customer exists
+//         const customer = await Customer.findById(customerId);
+//         if (!customer) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Customer not found'
+//             });
+//         }
+
+//         // Verify collector exists
+//         const collector = await Collector.findById(collectorId);
+//         if (!collector) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Collector not found'
+//             });
+//         }
+
+//         // Verify plan exists if provided
+//         if (planId) {
+//             const plan = await Plan.findById(planId);
+//             if (!plan) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'Plan not found'
+//                 });
+//             }
+//         }
+
+//         // REMOVED: Check if customer already has an active account
+//         // This allows same customer to have multiple accounts
+
+//         // Set default values for pigmy account fields
+//         const accountData = {
+//             ...req.body,
+//             totalBalance: 0, // Initialize with zero balance
+//             transactions: [], // Initialize empty transactions array
+//             openingDate: req.body.startDate || new Date(), // Use startDate as openingDate
+//             status: req.body.status || 'active'
+//         };
+
+//         const account = new Account(accountData);
+//         const newAccount = await account.save();
+
+//         // Populate all details
+//         await newAccount.populate('customerId', 'name customerId phone email address nomineeName');
+//         await newAccount.populate('collectorId', 'name collectorId area phone');
+//         await newAccount.populate('planId', 'name amount interestRate duration');
+
+//         res.status(201).json({
+//             success: true,
+//             message: 'Account created successfully',
+//             data: newAccount
+//         });
+//     } catch (error) {
+//         if (error.name === 'ValidationError') {
+//             const messages = Object.values(error.errors).map(val => val.message);
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Validation Error',
+//                 errors: messages
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
+// @desc    Create new account
+// @route   POST /api/accounts
+// @access  Public
+// const createAccount = async (req, res) => {
+//     try {
+//         console.log("Received account creation request:", req.body);
+
+//         const { accountNumber, customerId, collectorId, planId } = req.body;
+
+//         // ✅ ONLY check accountNumber - REMOVE ALL accountId CHECKS
+//         const existingAccount = await Account.findOne({ accountNumber });
+//         if (existingAccount) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Account number already exists'
+//             });
+//         }
+
+//         // Verify customer exists
+//         const customer = await Customer.findById(customerId);
+//         if (!customer) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Customer not found'
+//             });
+//         }
+
+//         // Verify collector exists
+//         const collector = await Collector.findById(collectorId);
+//         if (!collector) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Collector not found'
+//             });
+//         }
+
+//         // Verify plan exists if provided
+//         if (planId) {
+//             const plan = await Plan.findById(planId);
+//             if (!plan) {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'Plan not found'
+//                 });
+//             }
+//         }
+
+//         // Prepare account data
+//         const accountData = {
+//             accountNumber: req.body.accountNumber,
+//             customerId: req.body.customerId,
+//             collectorId: req.body.collectorId,
+//             planId: req.body.planId,
+//             accountType: req.body.accountType,
+//             dailyAmount: req.body.dailyAmount,
+//             startDate: req.body.startDate,
+//             duration: req.body.duration,
+//             status: req.body.status || 'active',
+//             remarks: req.body.remarks,
+//             interestRate: req.body.interestRate,
+//             totalDays: req.body.totalDays,
+//             maturityDate: req.body.maturityDate,
+//             customerName: req.body.customerName,
+//             planName: req.body.planName,
+//             collectorName: req.body.collectorName,
+//             maturityStatus: req.body.maturityStatus || 'Pending',
+//             openingDate: req.body.startDate || new Date(),
+//             totalBalance: 0,
+//             totalDeposits: 0,
+//             transactions: []
+//         };
+
+//         console.log("Creating account with data:", accountData);
+
+//         const account = new Account(accountData);
+//         const newAccount = await account.save();
+
+//         // Populate all details
+//         await newAccount.populate('customerId', 'name customerId phone email address nomineeName');
+//         await newAccount.populate('collectorId', 'name collectorId area phone');
+//         await newAccount.populate('planId', 'name amount interestRate duration');
+
+//         console.log("Account created successfully:", newAccount.accountNumber);
+
+//         res.status(201).json({
+//             success: true,
+//             message: 'Account created successfully',
+//             data: newAccount
+//         });
+//     } catch (error) {
+//         console.error("Account creation error:", error);
+        
+//         if (error.name === 'ValidationError') {
+//             const messages = Object.values(error.errors).map(val => val.message);
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Validation Error',
+//                 errors: messages
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
+// @desc    Create new account
+// @route   POST /api/accounts
+// @access  Public
+// @desc    Create new account
+// @route   POST /api/accounts
+// @access  Public
 const createAccount = async (req, res) => {
     try {
-        const { accountNumber, accountId, customerId, collectorId, planId } = req.body;
+        console.log("Received account creation request:", req.body);
+
+        const { accountNumber, customerId, collectorId, planId, accountType, dailyAmount, startDate, duration } = req.body;
 
         // Check if account number already exists
-        const existingAccountByNumber = await Account.findOne({ accountNumber });
-        if (existingAccountByNumber) {
+        const existingAccount = await Account.findOne({ accountNumber });
+        if (existingAccount) {
             return res.status(400).json({
                 success: false,
                 message: 'Account number already exists'
-            });
-        }
-
-        // Check if account ID already exists
-        const existingAccountById = await Account.findOne({ accountId });
-        if (existingAccountById) {
-            return res.status(400).json({
-                success: false,
-                message: 'Account ID already exists'
             });
         }
 
@@ -127,9 +328,10 @@ const createAccount = async (req, res) => {
             });
         }
 
-        // Verify plan exists if provided
+        // Verify plan exists if provided and get plan details
+        let plan = null;
         if (planId) {
-            const plan = await Plan.findById(planId);
+            plan = await Plan.findById(planId);
             if (!plan) {
                 return res.status(400).json({
                     success: false,
@@ -138,25 +340,83 @@ const createAccount = async (req, res) => {
             }
         }
 
-        // REMOVED: Check if customer already has an active account
-        // This allows same customer to have multiple accounts
-
-        // Set default values for pigmy account fields
-        const accountData = {
-            ...req.body,
-            totalBalance: 0, // Initialize with zero balance
-            transactions: [], // Initialize empty transactions array
-            openingDate: req.body.startDate || new Date(), // Use startDate as openingDate
-            status: req.body.status || 'active'
+        // ✅ Calculate necessary fields on the backend
+        const calculateTotalDays = (duration, accountType) => {
+            const durationValue = parseInt(duration);
+            switch (accountType?.toLowerCase()) {
+                case 'daily':
+                    return durationValue;
+                case 'weekly':
+                    return durationValue * 7;
+                case 'monthly':
+                    return durationValue * 30;
+                default:
+                    return durationValue * 30;
+            }
         };
+
+        const calculateMaturityDate = (startDate, duration, accountType) => {
+            const start = new Date(startDate);
+            const maturity = new Date(start);
+            const durationValue = parseInt(duration);
+
+            switch (accountType?.toLowerCase()) {
+                case 'daily':
+                    maturity.setDate(maturity.getDate() + durationValue);
+                    break;
+                case 'weekly':
+                    maturity.setDate(maturity.getDate() + durationValue * 7);
+                    break;
+                case 'monthly':
+                    maturity.setMonth(maturity.getMonth() + durationValue);
+                    break;
+                default:
+                    maturity.setMonth(maturity.getMonth() + durationValue);
+            }
+            return maturity;
+        };
+
+        // Prepare account data with only essential fields + calculated fields
+        const accountData = {
+            // Essential form data
+            accountNumber: accountNumber,
+            customerId: customerId,
+            collectorId: collectorId,
+            planId: planId,
+            accountType: accountType,
+            dailyAmount: dailyAmount,
+            startDate: startDate,
+            duration: duration,
+            status: req.body.status || 'active',
+            remarks: req.body.remarks || '',
+            
+            // Calculated fields
+            interestRate: plan?.interestRate || 6.5,
+            totalDays: calculateTotalDays(duration, accountType),
+            maturityDate: calculateMaturityDate(startDate, duration, accountType),
+            
+            // Default values
+            totalBalance: 0,
+            totalDeposits: 0,
+            transactions: [],
+            openingDate: startDate || new Date(),
+            maturityStatus: 'Pending',
+            customerName: customer?.name,
+            planName: plan?.name,
+            collectorName: collector?.name
+        };
+
+        console.log("Creating account with processed data:", accountData);
 
         const account = new Account(accountData);
         const newAccount = await account.save();
 
-        // Populate all details
+        // Populate all details for response
         await newAccount.populate('customerId', 'name customerId phone email address nomineeName');
         await newAccount.populate('collectorId', 'name collectorId area phone');
         await newAccount.populate('planId', 'name amount interestRate duration');
+
+        console.log("Account created successfully:", newAccount.accountNumber);
 
         res.status(201).json({
             success: true,
@@ -164,6 +424,8 @@ const createAccount = async (req, res) => {
             data: newAccount
         });
     } catch (error) {
+        console.error("Account creation error:", error);
+        
         if (error.name === 'ValidationError') {
             const messages = Object.values(error.errors).map(val => val.message);
             return res.status(400).json({
@@ -180,7 +442,6 @@ const createAccount = async (req, res) => {
         });
     }
 };
-
 // @desc    Get accounts by customer
 // @route   GET /api/accounts/customer/:customerId
 // @access  Public

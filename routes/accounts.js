@@ -12,15 +12,23 @@ const {
     getAccountStats
 } = require('../conroller/accountController');
 
+const { protect, authorize } = require('../middleware/authMiddleware'); // Admin middleware
+const { protect: customerProtect } = require('../middleware/customerAuthMiddleware'); // Customer middleware
+
+// ✅ CUSTOMER ROUTES - Use customer middleware
+router.route('/customer/:customerId')
+    .get(customerProtect, getAccountsByCustomer); // Use customerProtect instead of protect
+
+// ✅ ADMIN-ONLY ROUTES - Use admin middleware
+router.use(protect); // Apply admin protection
+router.use(authorize(['admin'])); // Restrict to admin only
+
 router.route('/')
     .get(getAllAccounts)
     .post(createAccount);
 
 router.route('/stats/overview')
     .get(getAccountStats);
-
-router.route('/customer/:customerId')
-    .get(getAccountsByCustomer);
 
 router.route('/:id')
     .get(getAccountById)

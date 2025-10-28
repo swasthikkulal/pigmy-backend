@@ -1,16 +1,13 @@
-const Admin = require('../models/Admin');
+// controllers/authController.js - UPDATED
+const Admin = require("../models/Admin")
 const jwt = require('jsonwebtoken');
-const bcrypt = require("bcrypt")
 
-// Generate JWT Token
-
-
-// Register new admin (optional setup route)
+// Register new admin
 const registerAdmin = async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
-        // Validation: Check if all required fields are provided
+        // Validation
         if (!name || !email || !password) {
             return res.status(400).json({ 
                 success: false, 
@@ -18,7 +15,7 @@ const registerAdmin = async (req, res) => {
             });
         }
 
-        // Check if admin already exists with this email
+        // Check if admin already exists
         const existingAdmin = await Admin.findOne({ email });
         if (existingAdmin) {
             return res.status(400).json({ 
@@ -27,30 +24,31 @@ const registerAdmin = async (req, res) => {
             });
         }
 
-        // Hash password
-        const hashPassword = await bcrypt.hash(password, 10);
-        
-        // Create admin - no need to call save() separately when using create()
+        // Create admin - password will be hashed by pre-save hook
         const admin = await Admin.create({ 
             name, 
             email, 
-            password: hashPassword 
+            password // Don't hash here, let the model handle it
         });
 
-        // Remove password from response
-        const adminResponse = admin.toObject();
-        delete adminResponse.password;
+        // Generate token using model method
+        const token = admin.getSignedJwtToken();
 
         res.status(201).json({ 
             success: true, 
             message: 'Admin registered successfully',
-            data: adminResponse
+            token: token,
+            data: {
+                id: admin._id,
+                name: admin.name,
+                email: admin.email,
+                role: admin.role
+            }
         });
 
     } catch (err) {
         console.error('Registration error:', err);
         
-        // Handle duplicate key errors
         if (err.code === 11000) {
             return res.status(400).json({ 
                 success: false, 
@@ -58,7 +56,6 @@ const registerAdmin = async (req, res) => {
             });
         }
         
-        // Handle validation errors
         if (err.name === 'ValidationError') {
             const messages = Object.values(err.errors).map(error => error.message);
             return res.status(400).json({ 
@@ -75,28 +72,79 @@ const registerAdmin = async (req, res) => {
         });
     }
 };
-// Login admin
+
+// Login admin - UPDATED
 const loginAdmin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const admin = await Admin.findOne({ email });
-        if (!admin) return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        console.log('🔐 Login attempt for:', email);
 
-        const validPassword = await bcrypt.compare(password, admin.password);
-        if (!validPassword) return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        // Validation
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Email and password are required' 
+            });
+        }
 
-        const token = jwt.sign({ id: admin._id, email: admin.email }, "hello", { expiresIn: "1h" });
+        // Find admin with password field
+        const admin = await Admin.findOne({ email }).select('+password');
+        
+        if (!admin) {
+            console.log('❌ Admin not found:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid credentials' 
+            });
+        }
+
+        // Check password using model method
+        const isMatch = await admin.matchPassword(password);
+        
+        if (!isMatch) {
+            console.log('❌ Password mismatch for:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid credentials' 
+            });
+        }
+
+        // Check if admin is active
+        if (!admin.isActive) {
+            console.log('❌ Admin account inactive:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Account is deactivated. Please contact administrator.' 
+            });
+        }
+
+        // Generate token using model method
+        const token = admin.getSignedJwtToken();
+
+        console.log('✅ Login successful for:', email);
+        console.log('🔑 Token generated');
+
         res.json({
             success: true,
             message: 'Login successful',
+            token: token,
             data: {
-                username: admin.username,
+                id: admin._id,
+                name: admin.name,
                 email: admin.email,
+                role: admin.role || 'admin',
+                isActive: admin.isActive
             }
         });
+
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Server error' });
+        console.error('💥 Login error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error during login',
+            error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
     }
 };
 

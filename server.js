@@ -12,6 +12,14 @@ const planRoutes = require("./routes/plans");
 const authRoutes = require("./routes/auth"); // Admin auth routes
 const customerAuthRoutes = require("./routes/customerAuth"); // Customer auth routes
 const paymentRoutes = require("./routes/paymentRoutes");
+const setupRoutes = require('./routes/setupRoutes');
+
+// Import New Collector Functionality Routes
+const collectorAuthRoutes = require("./routes/collectorAuthRoutes");
+const withdrawalRoutes = require("./routes/withdrawalRoutes");
+const feedbackRoutes = require("./routes/feedbackRoutes");
+const statementRoutes = require("./routes/statementRoutes");
+const collectorAppRoutes = require("./routes/collectorAppRoutes"); // Add this line
 
 // Middleware
 app.use(express.json());
@@ -26,18 +34,24 @@ app.get("/", async (req, res) => {
     res.send("Routes are working! 🚀");
 });
 
-// API Routes - CLEANED UP VERSION
+// API Routes - UPDATED WITH COLLECTOR FUNCTIONALITY
 app.use("/api/auth", authRoutes); // Admin authentication
 app.use("/api/auth/customer", customerAuthRoutes); // Customer authentication
-app.use("/api/collectors", collectorRoutes);
+app.use("/api/auth/collector", collectorAuthRoutes); // Collector authentication
+
+app.use("/api/collectors", collectorRoutes); // Admin collector management
+app.use("/api/collector", collectorAppRoutes); // Collector app functionality ← Add this line
 app.use("/api/customers", customerRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/plans", planRoutes);
-app.use('/api/payments', paymentRoutes); 
+app.use('/api/payments', paymentRoutes);
 
-// REMOVE these duplicate lines:
-// app.use('/api/users', require('./routes/users')); // ← Remove if not needed
-// app.use('/api/auth/user', require('./routes/customerAuth')); // ← This is duplicate!
+// New Collector Functionality Routes
+app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/statements', statementRoutes);
+
+app.use('/api/setup', setupRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -59,4 +73,11 @@ app.use((req, res) => {
 
 app.listen(port, () => {
     console.log(`Server is running on port: ${port}`);
+    console.log(`Collector functionality routes added:
+    - /api/auth/collector (Collector authentication)
+    - /api/collector (Collector app functionality)
+    - /api/withdrawals (Withdrawal management)
+    - /api/feedback (Feedback management)
+    - /api/statements (Statement management)
+    `);
 });

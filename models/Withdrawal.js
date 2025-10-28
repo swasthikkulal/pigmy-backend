@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const paymentSchema = new mongoose.Schema({
+const withdrawalSchema = new mongoose.Schema({
     accountId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Account',
@@ -11,42 +11,29 @@ const paymentSchema = new mongoose.Schema({
         ref: 'Customer',
         required: true
     },
-    collectorId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Collector',
-        required: false
-    },
     amount: {
         type: Number,
         required: true
     },
-    paymentDate: {
-        type: Date,
-        default: Date.now
-    },
-    paymentMethod: {
+    reason: {
         type: String,
-        enum: ['cash', 'online'],
-        default: 'cash'
+        required: true
     },
     status: {
         type: String,
-        enum: ['pending', 'completed', 'verified'],
+        enum: ['pending', 'approved', 'rejected'],
         default: 'pending'
-    },
-    receiptNumber: {
-        type: String
     },
     remarks: {
         type: String
     },
-    verifiedBy: {
+    processedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'adminModel'
+        ref: 'Collector'
     },
-    verifiedAt: {
+    processedAt: {
         type: Date
     }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Payment', paymentSchema);
+module.exports = mongoose.model('Withdrawal', withdrawalSchema);

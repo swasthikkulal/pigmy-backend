@@ -57,13 +57,8 @@ const transactionSchema = new mongoose.Schema({
 }, { _id: false });
 
 const accountSchema = new mongoose.Schema({
-  // Basic Account Information
+  // Basic Account Information - Use only accountNumber, remove accountId
   accountNumber: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  accountId: {
     type: String,
     required: true,
     unique: true
@@ -215,55 +210,8 @@ const accountSchema = new mongoose.Schema({
     }
   },
 
-  // Auto-deduction Settings
-  autoDeduction: {
-    enabled: {
-      type: Boolean,
-      default: false
-    },
-    deductionDate: {
-      type: Number, // Day of month (1-31)
-      min: 1,
-      max: 31
-    },
-    bankAccount: {
-      bankName: String,
-      accountNumber: String,
-      ifscCode: String
-    }
-  },
-
-  // Audit Fields
-  createdBy: {
-    type: String,
-    default: 'Admin'
-  },
-  updatedBy: {
-    type: String
-  },
-  remarks: {
-    type: String
-  },
-
   // Transactions History (linked to Payment model)
-  transactions: [transactionSchema],
-
-  // Pending Payments Tracking
-  pendingPayments: [{
-    periodStart: Date,
-    periodEnd: Date,
-    amount: Number,
-    dueDate: Date,
-    status: {
-      type: String,
-      enum: ['pending', 'overdue', 'partial'],
-      default: 'pending'
-    },
-    paidAmount: {
-      type: Number,
-      default: 0
-    }
-  }]
+  transactions: [transactionSchema]
 
 }, { 
   timestamps: true 
@@ -290,28 +238,6 @@ accountSchema.virtual('accountAge').get(function() {
   const today = new Date();
   const openingDate = new Date(this.openingDate);
   return Math.floor((today - openingDate) / (1000 * 60 * 60 * 24));
-});
-
-// Virtual for next payment due date
-accountSchema.virtual('nextPaymentDue').get(function() {
-  if (!this.lastPaymentDate) return this.openingDate;
-  
-  const lastPayment = new Date(this.lastPaymentDate);
-  let nextDue = new Date(lastPayment);
-  
-  switch (this.accountType) {
-    case 'daily':
-      nextDue.setDate(nextDue.getDate() + 1);
-      break;
-    case 'weekly':
-      nextDue.setDate(nextDue.getDate() + 7);
-      break;
-    case 'monthly':
-      nextDue.setMonth(nextDue.getMonth() + 1);
-      break;
-  }
-  
-  return nextDue;
 });
 
 // Methods
@@ -393,27 +319,6 @@ accountSchema.methods.calculatePendingAmount = function() {
   };
 };
 
-accountSchema.methods.getPaymentHistory = function(limit = 10) {
-  return this.transactions
-    .filter(t => t.type === 'deposit')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, limit);
-};
-
-accountSchema.methods.updateMaturityDetails = function() {
-  if (this.maturityDate && new Date() >= new Date(this.maturityDate)) {
-    this.maturityStatus = 'Due';
-    
-    // Calculate maturity amount if not set
-    if (this.maturityAmount === 0) {
-      const principal = this.totalDeposits;
-      const interest = (principal * this.interestRate * parseInt(this.duration)) / (12 * 100);
-      this.maturityAmount = principal + interest;
-    }
-  }
-  return this.save();
-};
-
 // Static Methods
 accountSchema.statics.findByCustomer = function(customerId) {
   return this.find({ customerId })
@@ -426,66 +331,5 @@ accountSchema.statics.findActiveAccounts = function() {
     .populate('customerId', 'name phone')
     .populate('collectorId', 'name area');
 };
-
-accountSchema.statics.getAccountsSummary = function() {
-  return this.aggregate([
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 },
-        totalBalance: { $sum: '$totalBalance' },
-        totalDeposits: { $sum: '$totalDeposits' }
-      }
-    }
-  ]);
-};
-
-accountSchema.statics.findOverdueAccounts = function() {
-  const today = new Date();
-  return this.find({
-    status: 'active',
-    $or: [
-      { 
-        accountType: 'daily',
-        lastPaymentDate: { 
-          $lt: new Date(today.setDate(today.getDate() - 1))
-        }
-      },
-      {
-        accountType: 'weekly',
-        lastPaymentDate: {
-          $lt: new Date(today.setDate(today.getDate() - 7))
-        }
-      },
-      {
-        accountType: 'monthly',
-        lastPaymentDate: {
-          $lt: new Date(today.setMonth(today.getMonth() - 1))
-        }
-      }
-    ]
-  }).populate('customerId collectorId');
-};
-
-// Pre-save middleware
-accountSchema.pre('save', function(next) {
-  // Update display names if references are populated
-  if (this.isModified('customerId') && this.customerId && this.customerId.name) {
-    this.customerName = this.customerId.name;
-  }
-  if (this.isModified('collectorId') && this.collectorId && this.collectorId.name) {
-    this.collectorName = this.collectorId.name;
-  }
-  if (this.isModified('planId') && this.planId && this.planId.name) {
-    this.planName = this.planId.name;
-  }
-
-  // Update maturity status if maturity date is reached
-  if (this.maturityDate && new Date() >= new Date(this.maturityDate)) {
-    this.maturityStatus = 'Due';
-  }
-
-  next();
-});
 
 module.exports = mongoose.model('Account', accountSchema);

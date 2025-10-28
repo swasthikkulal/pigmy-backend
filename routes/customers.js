@@ -8,6 +8,12 @@ const {
     updateCustomerSavings
 } = require('../conroller/customerController');
 
+const { protect, authorize } = require('../middleware/authMiddleware');
+
+// All routes are protected and admin-only
+router.use(protect);
+router.use(authorize(['admin']));
+
 router.route('/')
     .get(getAllCustomers)
     .post(createCustomer);

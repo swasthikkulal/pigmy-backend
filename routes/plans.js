@@ -12,6 +12,12 @@ const {
   calculateMaturity
 } = require('../conroller/planController');
 
+const { protect, authorize } = require('../middleware/authMiddleware');
+
+// All routes are protected and admin-only
+router.use(protect);
+router.use(authorize(['admin']));
+
 router.route('/')
   .get(getAllPlans)
   .post(createPlan);

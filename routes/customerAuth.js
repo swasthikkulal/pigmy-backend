@@ -17,9 +17,9 @@ router.put('/change-password', protect, changePassword);
 
 // Add a test route to verify it's working
 router.get('/test', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Customer auth routes are working!' 
+  res.json({
+    success: true,
+    message: 'Customer auth routes are working!'
   });
 });
 
