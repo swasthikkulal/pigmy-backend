@@ -272,7 +272,7 @@ const getAccountById = async (req, res) => {
 //         });
 //     } catch (error) {
 //         console.error("Account creation error:", error);
-        
+
 //         if (error.name === 'ValidationError') {
 //             const messages = Object.values(error.errors).map(val => val.message);
 //             return res.status(400).json({
@@ -389,12 +389,12 @@ const createAccount = async (req, res) => {
             duration: duration,
             status: req.body.status || 'active',
             remarks: req.body.remarks || '',
-            
+
             // Calculated fields
             interestRate: plan?.interestRate || 6.5,
             totalDays: calculateTotalDays(duration, accountType),
             maturityDate: calculateMaturityDate(startDate, duration, accountType),
-            
+
             // Default values
             totalBalance: 0,
             totalDeposits: 0,
@@ -425,7 +425,7 @@ const createAccount = async (req, res) => {
         });
     } catch (error) {
         console.error("Account creation error:", error);
-        
+
         if (error.name === 'ValidationError') {
             const messages = Object.values(error.errors).map(val => val.message);
             return res.status(400).json({
@@ -542,11 +542,11 @@ const addTransaction = async (req, res) => {
         const customer = await Customer.findById(account.customerId);
         if (customer) {
             // Calculate total savings from all active accounts
-            const activeAccounts = await Account.find({ 
-                customerId: account.customerId, 
-                status: 'active' 
+            const activeAccounts = await Account.find({
+                customerId: account.customerId,
+                status: 'active'
             });
-            
+
             const totalSavings = activeAccounts.reduce((total, acc) => total + (acc.totalBalance || 0), 0);
             customer.totalSavings = totalSavings;
             customer.lastCollectionDate = new Date();
@@ -630,11 +630,11 @@ const updateAccountStatus = async (req, res) => {
         }
 
         const updateData = { status };
-        
+
         // If closing account, set closing date
         if (status === 'closed' || status === 'completed') {
             updateData.closingDate = new Date();
-            
+
             // If completed, also set maturity status to Paid
             if (status === 'completed') {
                 updateData.maturityStatus = 'Paid';
@@ -662,11 +662,11 @@ const updateAccountStatus = async (req, res) => {
         if (status === 'closed' || status === 'completed' || status === 'active') {
             const customer = await Customer.findById(account.customerId);
             if (customer) {
-                const activeAccounts = await Account.find({ 
-                    customerId: account.customerId, 
-                    status: 'active' 
+                const activeAccounts = await Account.find({
+                    customerId: account.customerId,
+                    status: 'active'
                 });
-                
+
                 const totalSavings = activeAccounts.reduce((total, acc) => total + (acc.totalBalance || 0), 0);
                 customer.totalSavings = totalSavings;
                 await customer.save();

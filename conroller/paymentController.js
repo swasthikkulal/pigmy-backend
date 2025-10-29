@@ -2,17 +2,400 @@ const Payment = require('../models/Payment');
 const Account = require('../models/Account');
 const Customer = require('../models/Customer');
 
+
+// exports.getCollectorPayment = async (req, res) => {
+//     try {
+//         console.log("collector found", req.collector.id)
+//         const findPaymentsByCollector = await Payment.find({collectorId: req.collector.id})
+//         if (!findPaymentsByCollector) {
+//             return res.json({success:false, message:"No payments found for this collector"})
+//         }
+//         return res.json({ success: true, data: findPaymentsByCollector })
+//     } catch (error) {
+//        return res.json({success:false, message:error.message})
+//     }
+// }
+
 // Process payment - ACTUALLY SAVES TO DATABASE
+// exports.processPayment = async (req, res) => {
+//     try {
+//         console.log('🔔 Process payment called by user:', req.customer?.id || req.user?.id);
+//         console.log('📦 Request body:', req.body);
+
+//         const { 
+//             accountId, 
+//             amount, 
+//             currency = 'INR', 
+//             paymentMethod, 
+//             transactionId,
+//             referenceNumber,
+//             description,
+//             status = 'pending',
+//             type = 'deposit'
+//         } = req.body;
+
+//         // Validate required fields
+//         if (!accountId || !amount || !paymentMethod) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Missing required fields: accountId, amount, paymentMethod'
+//             });
+//         }
+
+//         // Check if account exists
+//         const account = await Account.findById(accountId);
+//         if (!account) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Account not found'
+//             });
+//         }
+
+//         // For customers, verify they own the account
+//         if (req.customer && account.customerId.toString() !== req.customer.id) {
+//             return res.status(403).json({
+//                 success: false,
+//                 message: 'Access denied - account does not belong to you'
+//             });
+//         }
+
+//         // Generate reference number if not provided
+//         const finalReferenceNumber = referenceNumber || `REF-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+//         // Determine status based on payment method
+//         const paymentStatus = paymentMethod === 'online' ? 'completed' : status;
+
+//         // Determine user type and ID
+//         const createdBy = req.customer?.id || req.user?.id;
+//         const createdByModel = req.customer ? 'Customer' : 'User';
+
+//         console.log('👤 Payment created by:', createdBy, 'Type:', createdByModel);
+
+//         // ✅ ACTUALLY CREATE PAYMENT IN DATABASE
+//         const payment = new Payment({
+//             accountId,
+//             customerId: account.customerId,
+//             amount: parseFloat(amount),
+//             currency,
+//             paymentMethod,
+//             transactionId,
+//             referenceNumber: finalReferenceNumber,
+//             description: description || `Payment for account ${account.accountNumber}`,
+//             status: paymentStatus,
+//             type,
+//             createdBy: createdBy,
+//             createdByModel: createdByModel,
+//             processedAt: new Date()
+//         });
+
+//         // ✅ ACTUALLY SAVE TO DATABASE
+//         const savedPayment = await payment.save();
+//         console.log('✅ Payment saved to DB with ID:', savedPayment._id);
+
+//         // ✅ UPDATE ACCOUNT BALANCE IF PAYMENT IS COMPLETED
+//         if (savedPayment.status === 'completed') {
+//             const updatedAccount = await Account.findByIdAndUpdate(
+//                 accountId, 
+//                 { 
+//                     $inc: { totalBalance: parseFloat(amount) }
+//                 },
+//                 { new: true }
+//             );
+//             console.log('💰 Account balance updated:', updatedAccount.totalBalance);
+//         }
+
+//         // ✅ ADD TRANSACTION TO ACCOUNT
+//         await Account.findByIdAndUpdate(
+//             accountId,
+//             {
+//                 $push: {
+//                     transactions: {
+//                         date: new Date(),
+//                         amount: parseFloat(amount),
+//                         type: 'deposit',
+//                         paymentMethod: paymentMethod,
+//                         status: savedPayment.status,
+//                         referenceNumber: finalReferenceNumber,
+//                         description: description || (savedPayment.status === 'completed' ? 'Payment received' : 'Pending payment')
+//                     }
+//                 }
+//             }
+//         );
+
+//         res.json({
+//             success: true,
+//             message: 'Payment processed successfully',
+//             paymentId: savedPayment._id,
+//             referenceNumber: finalReferenceNumber,
+//             status: savedPayment.status,
+//             data: savedPayment
+//         });
+
+//     } catch (error) {
+//         console.error('❌ Payment processing error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error processing payment',
+//             error: error.message
+//         });
+//     }
+// };
+// Process payment - ACTUALLY SAVES TO DATABASE
+exports.getCollectorPayment = async (req, res) => {
+    try {
+        console.log("🔄 Fetching payments for collector:", req.collector.id);
+        
+        const findPaymentsByCollector = await Payment.find({ collectorId: req.collector.id })
+            .populate('customerId', 'name phone customerId address email') // Populate customer details
+            .populate('accountId', 'accountNumber accountType dailyAmount totalBalance openingDate status') // Populate account details
+            .populate('collectorId', 'name collectorId phone area') // Populate collector details
+            // .populate('verifiedBy', 'name email') // Populate verified by admin
+            .sort({ createdAt: -1 }); // Sort by latest first
+
+        if (!findPaymentsByCollector || findPaymentsByCollector.length === 0) {
+            return res.json({ 
+                success: false, 
+                message: "No payments found for this collector" 
+            });
+        }
+
+        console.log(`✅ Found ${findPaymentsByCollector.length} payments for collector`);
+
+        // Calculate stats
+        const stats = {
+            total: findPaymentsByCollector.length,
+            pending: findPaymentsByCollector.filter(p => p.status === 'pending').length,
+            completed: findPaymentsByCollector.filter(p => p.status === 'completed').length,
+            verified: findPaymentsByCollector.filter(p => p.status === 'verified').length,
+            totalAmount: findPaymentsByCollector.reduce((sum, payment) => sum + (payment.amount || 0), 0),
+            cashPayments: findPaymentsByCollector.filter(p => p.paymentMethod === 'cash').length,
+            onlinePayments: findPaymentsByCollector.filter(p => p.paymentMethod === 'online').length
+        };
+
+        return res.json({ 
+            success: true, 
+            data: findPaymentsByCollector,
+            stats: stats,
+            count: findPaymentsByCollector.length
+        });
+        
+    } catch (error) {
+        console.error("❌ Error fetching collector payments:", error);
+        return res.status(500).json({ 
+            success: false, 
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+}
+
+// In paymentController.js
+// exports.handleUpdateStatus = async (req, res) => {
+//     try {
+//         const { id } = req.params;
+//         const { status } = req.body;
+
+//         console.log('🔄 Updating payment status:', { paymentId: id, newStatus: status });
+
+//         // Validate required fields
+//         if (!status) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Status is required"
+//             });
+//         }
+
+//         // Validate status value
+//         const validStatuses = ['pending', 'completed', 'verified', 'failed'];
+//         if (!validStatuses.includes(status)) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Invalid status. Must be one of: pending, completed, verified, failed"
+//             });
+//         }
+
+//         // Find the payment
+//         const payment = await Payment.findById(id);
+        
+//         if (!payment) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Payment not found"
+//             });
+//         }
+
+//         // Check if collector owns this payment
+//         if (payment.collectorId.toString() !== req.collector.id) {
+//             return res.status(403).json({
+//                 success: false,
+//                 message: "Access denied. You can only update your own payments"
+//             });
+//         }
+
+//         const oldStatus = payment.status;
+        
+//         // Update payment status
+//         payment.status = status;
+        
+//         // If status changed to completed and it's a collector updating
+//         if (status === 'completed' && oldStatus !== 'completed') {
+//             payment.verifiedBy = req.collector.id;
+//             payment.verifiedAt = new Date();
+            
+//             // Update account balance
+//             await Account.findByIdAndUpdate(
+//                 payment.accountId, 
+//                 { $inc: { totalBalance: payment.amount } }
+//             );
+//             console.log('💰 Account balance updated');
+//         }
+
+//         const updatedPayment = await payment.save();
+        
+//         console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
+
+//         res.json({
+//             success: true,
+//             message: `Payment status updated to ${status}`,
+//             data: {
+//                 _id: updatedPayment._id,
+//                 status: updatedPayment.status,
+//                 previousStatus: oldStatus,
+//                 verifiedBy: updatedPayment.verifiedBy,
+//                 verifiedAt: updatedPayment.verifiedAt
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('❌ Error updating payment status:', error);
+        
+//         if (error.name === 'CastError') {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Invalid payment ID format"
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: "Internal server error while updating payment status",
+//             error: error.message
+//         });
+//     }
+// };
+exports.handleUpdateStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        console.log('🔄 Updating payment status:', { paymentId: id, newStatus: status });
+
+        // Validate required fields
+        if (!status) {
+            return res.status(400).json({
+                success: false,
+                message: "Status is required"
+            });
+        }
+
+        // Find the payment with account details
+        const payment = await Payment.findById(id)
+            .populate('accountId');
+        
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment not found"
+            });
+        }
+
+        const oldStatus = payment.status;
+        
+        // Update payment status
+        payment.status = status;
+        
+        // If status changed to completed from pending
+        if (status === 'completed' && oldStatus === 'pending') {
+            payment.verifiedBy = req.collector.id;
+            payment.verifiedAt = new Date();
+            
+            // Update account balance
+            await Account.findByIdAndUpdate(
+                payment.accountId, 
+                { 
+                    $inc: { totalBalance: payment.amount },
+                    $push: {
+                        transactions: {
+                            date: new Date(),
+                            amount: payment.amount,
+                            type: 'deposit',
+                            paymentMethod: payment.paymentMethod,
+                            status: 'completed',
+                            referenceNumber: payment.referenceNumber,
+                            description: `Payment verified by collector - ${payment.referenceNumber}`,
+                            verifiedBy: req.collector.id
+                        }
+                    }
+                }
+            );
+            console.log('💰 Account balance updated and transaction added');
+        }
+
+        // If reverting from completed to pending, remove the transaction and adjust balance
+        if (status === 'pending' && oldStatus === 'completed') {
+            await Account.findByIdAndUpdate(
+                payment.accountId, 
+                { 
+                    $inc: { totalBalance: -payment.amount },
+                    $pull: {
+                        transactions: {
+                            referenceNumber: payment.referenceNumber,
+                            status: 'completed'
+                        }
+                    }
+                }
+            );
+            console.log('💰 Account balance adjusted and transaction removed');
+        }
+
+        const updatedPayment = await payment.save();
+        
+        console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
+
+        res.json({
+            success: true,
+            message: `Payment status updated to ${status}`,
+            data: {
+                _id: updatedPayment._id,
+                status: updatedPayment.status,
+                previousStatus: oldStatus,
+                amount: updatedPayment.amount,
+                accountId: updatedPayment.accountId
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error updating payment status:', error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error while updating payment status",
+            error: error.message
+        });
+    }
+};
+
 exports.processPayment = async (req, res) => {
     try {
         console.log('🔔 Process payment called by user:', req.customer?.id || req.user?.id);
         console.log('📦 Request body:', req.body);
 
-        const { 
-            accountId, 
-            amount, 
-            currency = 'INR', 
-            paymentMethod, 
+        const {
+            accountId,
+            customerId, // Add this
+            collectorId, // ⭐ ADD THIS LINE - CRITICAL!
+            amount,
+            currency = 'INR',
+            paymentMethod,
             transactionId,
             referenceNumber,
             description,
@@ -56,11 +439,13 @@ exports.processPayment = async (req, res) => {
         const createdByModel = req.customer ? 'Customer' : 'User';
 
         console.log('👤 Payment created by:', createdBy, 'Type:', createdByModel);
+        console.log('👥 Collector ID from request:', collectorId); // ⭐ ADD THIS LOG
 
         // ✅ ACTUALLY CREATE PAYMENT IN DATABASE
         const payment = new Payment({
             accountId,
-            customerId: account.customerId,
+            customerId: account.customerId, // Use account's customerId for consistency
+            collectorId, // ⭐ ADD THIS LINE - SAVE COLLECTOR ID!
             amount: parseFloat(amount),
             currency,
             paymentMethod,
@@ -77,12 +462,13 @@ exports.processPayment = async (req, res) => {
         // ✅ ACTUALLY SAVE TO DATABASE
         const savedPayment = await payment.save();
         console.log('✅ Payment saved to DB with ID:', savedPayment._id);
+        console.log('💰 Collector ID saved with payment:', savedPayment.collectorId); // ⭐ ADD THIS LOG
 
         // ✅ UPDATE ACCOUNT BALANCE IF PAYMENT IS COMPLETED
         if (savedPayment.status === 'completed') {
             const updatedAccount = await Account.findByIdAndUpdate(
-                accountId, 
-                { 
+                accountId,
+                {
                     $inc: { totalBalance: parseFloat(amount) }
                 },
                 { new: true }
@@ -126,13 +512,12 @@ exports.processPayment = async (req, res) => {
         });
     }
 };
-
 // Get payment history - ACTUALLY FETCHES FROM DATABASE
 exports.getPaymentHistory = async (req, res) => {
     try {
         const { accountId } = req.params;
         console.log('📖 Fetching payment history for account:', accountId);
-        
+
         // Verify account exists
         const account = await Account.findById(accountId);
         if (!account) {
@@ -154,7 +539,7 @@ exports.getPaymentHistory = async (req, res) => {
         const payments = await Payment.find({ accountId })
             .sort({ createdAt: -1 })
             .populate('createdBy', 'name email');
-        
+
         console.log('✅ Found', payments.length, 'payments for account');
 
         res.json({
@@ -178,13 +563,13 @@ exports.getMyPayments = async (req, res) => {
     try {
         const customerId = req.customer.id;
         console.log('👤 Fetching payments for customer:', customerId);
-        
+
         // ✅ ACTUALLY FETCH CUSTOMER PAYMENTS FROM DATABASE
         const payments = await Payment.find({ customerId })
             .sort({ createdAt: -1 })
             .populate('accountId', 'accountNumber type')
             .populate('createdBy', 'name email');
-        
+
         console.log('✅ Found', payments.length, 'payments for customer');
 
         res.json({
@@ -207,14 +592,14 @@ exports.getMyPayments = async (req, res) => {
 exports.getAllPayments = async (req, res) => {
     try {
         console.log('📋 Fetching all payments');
-        
+
         // ✅ ACTUALLY FETCH ALL PAYMENTS FROM DATABASE
         const payments = await Payment.find()
             .sort({ createdAt: -1 })
             .populate('accountId', 'accountNumber type')
             .populate('customerId', 'name customerId')
             .populate('createdBy', 'name email');
-        
+
         console.log('✅ Found', payments.length, 'total payments');
 
         res.json({
@@ -237,14 +622,14 @@ exports.getAllPayments = async (req, res) => {
 exports.getPendingPayments = async (req, res) => {
     try {
         console.log('⏳ Fetching pending payments');
-        
+
         // ✅ ACTUALLY FETCH PENDING PAYMENTS FROM DATABASE
         const payments = await Payment.find({ status: 'pending' })
             .sort({ createdAt: -1 })
             .populate('accountId', 'accountNumber type')
             .populate('customerId', 'name customerId')
             .populate('createdBy', 'name email');
-        
+
         console.log('✅ Found', payments.length, 'pending payments');
 
         res.json({
@@ -267,26 +652,26 @@ exports.getPendingPayments = async (req, res) => {
 exports.getPaymentStats = async (req, res) => {
     try {
         console.log('📊 Fetching payment stats');
-        
+
         // ✅ ACTUALLY CALCULATE STATS FROM DATABASE
         const totalPayments = await Payment.countDocuments();
         const completedPayments = await Payment.countDocuments({ status: 'completed' });
         const pendingPayments = await Payment.countDocuments({ status: 'pending' });
         const failedPayments = await Payment.countDocuments({ status: 'failed' });
-        
+
         const totalAmount = await Payment.aggregate([
             { $match: { status: 'completed' } },
             { $group: { _id: null, total: { $sum: '$amount' } } }
         ]);
-        
-        const cashPayments = await Payment.countDocuments({ 
-            status: 'completed', 
+
+        const cashPayments = await Payment.countDocuments({
+            status: 'completed',
             paymentMethod: 'cash',
-             
+
         });
-        const onlinePayments = await Payment.countDocuments({ 
-            status: 'completed', 
-            paymentMethod: 'online' 
+        const onlinePayments = await Payment.countDocuments({
+            status: 'completed',
+            paymentMethod: 'online'
         });
 
         const stats = {
@@ -321,13 +706,13 @@ exports.getPaymentById = async (req, res) => {
     try {
         const { id } = req.params;
         console.log('🔍 Fetching payment by ID:', id);
-        
+
         // ✅ ACTUALLY FIND PAYMENT IN DATABASE
         const payment = await Payment.findById(id)
             .populate('accountId', 'accountNumber type')
             .populate('customerId', 'name customerId')
             .populate('createdBy', 'name email');
-        
+
         if (!payment) {
             return res.status(404).json({
                 success: false,
@@ -357,12 +742,12 @@ exports.updatePaymentStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status, notes } = req.body;
-        
+
         console.log('🔄 Updating payment status:', id, 'to', status);
 
         // ✅ ACTUALLY FIND AND UPDATE PAYMENT IN DATABASE
         const payment = await Payment.findById(id);
-        
+
         if (!payment) {
             return res.status(404).json({
                 success: false,
@@ -372,7 +757,7 @@ exports.updatePaymentStatus = async (req, res) => {
 
         const oldStatus = payment.status;
         payment.status = status;
-        
+
         if (notes) {
             payment.notes = notes;
         }
@@ -417,7 +802,7 @@ exports.verifyPayment = async (req, res) => {
 
         // ✅ ACTUALLY FIND AND VERIFY PAYMENT IN DATABASE
         const payment = await Payment.findById(id);
-        
+
         if (!payment) {
             return res.status(404).json({
                 success: false,
@@ -468,7 +853,7 @@ exports.deletePayment = async (req, res) => {
 
         // ✅ ACTUALLY DELETE PAYMENT FROM DATABASE
         const payment = await Payment.findById(id);
-        
+
         if (!payment) {
             return res.status(404).json({
                 success: false,
@@ -501,7 +886,7 @@ exports.bulkVerifyPayments = async (req, res) => {
 
         const result = await Payment.updateMany(
             { _id: { $in: paymentIds } },
-            { 
+            {
                 status: 'completed',
                 verifiedBy: req.user.id,
                 verifiedAt: new Date()

@@ -4,6 +4,7 @@ const Payment = require('../models/Payment');
 const Withdrawal = require('../models/Withdrawal');
 const Feedback = require('../models/Feedback');
 const Statement = require('../models/Statement');
+const Account = require("../models/Account")
 
 // @desc    Get all collectors
 // @route   GET /api/collectors
@@ -455,46 +456,266 @@ const getCollectorStats = async (req, res) => {
 // @desc    Get my customers
 // @route   GET /api/collectors/my/customers
 // @access  Private (Collector)
+// const getMyCustomers = async (req, res) => {
+//     try {
+//         const { page = 1, limit = 10, search } = req.query;
+        
+//         let query = { collectorId: req.collector._id };
+        
+//         // Add search functionality
+//         if (search) {
+//             query.$or = [
+//                 { name: { $regex: search, $options: 'i' } },
+//                 { phone: { $regex: search, $options: 'i' } },
+//                 { email: { $regex: search, $options: 'i' } }
+//             ];
+//         }
+
+//         const customers = await Customer.find(query)
+//             .select('name phone email address totalSavings lastPaymentDate status')
+//             .sort({ name: 1 })
+//             .limit(limit * 1)
+//             .skip((page - 1) * limit);
+
+//         const total = await Customer.countDocuments(query);
+
+//         // Get today's collections count
+//         const today = new Date();
+//         today.setHours(0, 0, 0, 0);
+//         const todaysCollections = await Payment.countDocuments({
+//             collectedBy: req.collector._id,
+//             paymentDate: { $gte: today }
+//         });
+
+//         res.status(200).json({
+//             success: true,
+//             data: customers,
+//             stats: {
+//                 totalCustomers: total,
+//                 todaysCollections
+//             },
+//             pagination: {
+//                 current: page,
+//                 pages: Math.ceil(total / limit),
+//                 total,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('Get my customers error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server error',
+//             error: error.message,
+//         });
+//     }
+// };
 const getMyCustomers = async (req, res) => {
     try {
         const { page = 1, limit = 10, search } = req.query;
         
-        let query = { collectorId: req.collector._id };
-        
-        // Add search functionality
+        // Get accounts for this collector and populate customer data
+        let accountQuery = { 
+            collectorId: req.collector._id, 
+            status: 'active' 
+        };
+
+        // Build aggregation pipeline for better performance
+        const aggregationPipeline = [
+            {
+                $match: accountQuery
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customer'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$customer',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: 'plans',
+                    localField: 'planId',
+                    foreignField: '_id',
+                    as: 'plan'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$plan',
+                    preserveNullAndEmptyArrays: true
+                }
+            }
+        ];
+
+        // Add search filter if provided
         if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { phone: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } }
-            ];
+            aggregationPipeline.push({
+                $match: {
+                    $or: [
+                        { 'customer.name': { $regex: search, $options: 'i' } },
+                        { 'customer.phone': { $regex: search, $options: 'i' } },
+                        { 'customer.email': { $regex: search, $options: 'i' } },
+                        { 'customer.customerId': { $regex: search, $options: 'i' } },
+                        { 'accountNumber': { $regex: search, $options: 'i' } }
+                    ]
+                }
+            });
         }
 
-        const customers = await Customer.find(query)
-            .select('name phone email address totalSavings lastPaymentDate status')
-            .sort({ name: 1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
+        // Group by customer to get unique customers
+        aggregationPipeline.push(
+            {
+                $group: {
+                    _id: '$customer._id',
+                    customer: { $first: '$customer' },
+                    accounts: { 
+                        $push: {
+                            accountNumber: '$accountNumber',
+                            planName: '$plan.name',
+                            dailyAmount: '$dailyAmount',
+                            status: '$status',
+                            currentBalance: '$currentBalance',
+                            maturityDate: '$maturityDate',
+                            startDate: '$startDate'
+                        }
+                    },
+                    totalAccounts: { $sum: 1 },
+                    activeAccounts: {
+                        $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+                    },
+                    totalDailyAmount: { $sum: '$dailyAmount' },
+                    totalBalance: { $sum: '$currentBalance' }
+                }
+            },
+            {
+                $project: {
+                    _id: '$customer._id',
+                    name: '$customer.name',
+                    phone: '$customer.phone',
+                    email: '$customer.email',
+                    address: '$customer.address',
+                    nomineeName: '$customer.nomineeName',
+                    customerId: '$customer.customerId',
+                    totalSavings: '$customer.totalSavings',
+                    lastPaymentDate: '$customer.lastPaymentDate',
+                    status: '$customer.status',
+                    createdAt: '$customer.createdAt',
+                    totalAccounts: 1,
+                    activeAccounts: 1,
+                    totalDailyAmount: 1,
+                    totalBalance: 1,
+                    accounts: 1
+                }
+            },
+            {
+                $sort: { name: 1 }
+            },
+            {
+                $skip: (page - 1) * limit
+            },
+            {
+                $limit: limit * 1
+            }
+        );
 
-        const total = await Customer.countDocuments(query);
+        const customers = await Account.aggregate(aggregationPipeline);
+
+        // Get total count for pagination
+        const countPipeline = [
+            {
+                $match: accountQuery
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customer'
+                }
+            },
+            {
+                $unwind: '$customer'
+            },
+            {
+                $group: {
+                    _id: '$customer._id'
+                }
+            },
+            {
+                $count: 'total'
+            }
+        ];
+
+        if (search) {
+            countPipeline.splice(2, 0, {
+                $match: {
+                    $or: [
+                        { 'customer.name': { $regex: search, $options: 'i' } },
+                        { 'customer.phone': { $regex: search, $options: 'i' } },
+                        { 'customer.email': { $regex: search, $options: 'i' } },
+                        { 'customer.customerId': { $regex: search, $options: 'i' } }
+                    ]
+                }
+            });
+        }
+
+        const totalResult = await Account.aggregate(countPipeline);
+        const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
         // Get today's collections count
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        
         const todaysCollections = await Payment.countDocuments({
-            collectedBy: req.collector._id,
-            paymentDate: { $gte: today }
+            collectorId: req.collector._id,
+            paymentMethod: 'cash',
+            status: { $in: ['completed', 'verified'] },
+            date: { $gte: today }
         });
+
+        const pendingCollections = await Payment.countDocuments({
+            collectorId: req.collector._id,
+            paymentMethod: 'cash',
+            status: 'pending'
+        });
+
+        // Calculate total daily collection from active accounts
+        const totalDailyCollectionResult = await Account.aggregate([
+            {
+                $match: { 
+                    collectorId: req.collector._id, 
+                    status: 'active' 
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: '$dailyAmount' }
+                }
+            }
+        ]);
+
+        const totalDailyCollection = totalDailyCollectionResult.length > 0 ? totalDailyCollectionResult[0].total : 0;
 
         res.status(200).json({
             success: true,
             data: customers,
             stats: {
                 totalCustomers: total,
-                todaysCollections
+                totalAccounts: await Account.countDocuments(accountQuery),
+                todaysCollections,
+                pendingCollections,
+                totalDailyCollection
             },
             pagination: {
-                current: page,
+                current: parseInt(page),
                 pages: Math.ceil(total / limit),
                 total,
             },

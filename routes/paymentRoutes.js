@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { protect: adminProtect, authorize } = require('../middleware/authMiddleware');
 const { protect: customerProtect } = require('../middleware/customerAuthMiddleware');
+const { protect: collectorProtect } = require("../middleware/collectorAuthMiddleware");
 
 console.log('=== DEBUGGING PAYMENT CONTROLLER ===');
 
@@ -12,7 +13,7 @@ try {
   paymentController = require('../conroller/paymentController'); // Make sure path is correct
   console.log('✓ Payment controller imported successfully');
   console.log('Controller object keys:', Object.keys(paymentController));
-  
+
   // Check each function we need
   const requiredFunctions = [
     'processPayment', 'getPaymentHistory', 'getMyPayments', 'getAllPayments',
@@ -20,20 +21,20 @@ try {
     'verifyPayment', 'deletePayment', 'bulkVerifyPayments', 'bulkCreatePayments',
     'getDailyCollections', 'getMonthlySummary'
   ];
-  
+
   requiredFunctions.forEach(func => {
     if (typeof paymentController[func] !== 'function') {
       console.warn(`⚠️ Missing function: ${func}`);
       // Create a dummy function for missing ones
-      paymentController[func] = (req, res) => res.status(501).json({ 
-        success: false, 
-        message: `Function ${func} not implemented` 
+      paymentController[func] = (req, res) => res.status(501).json({
+        success: false,
+        message: `Function ${func} not implemented`
       });
     } else {
       console.log(`✓ ${func}: function`);
     }
   });
-  
+
 } catch (error) {
   console.log('✗ Error importing payment controller:', error.message);
   // Create dummy controller as fallback
@@ -44,11 +45,11 @@ try {
     'verifyPayment', 'deletePayment', 'bulkVerifyPayments', 'bulkCreatePayments',
     'getDailyCollections', 'getMonthlySummary'
   ];
-  
+
   requiredFunctions.forEach(func => {
-    paymentController[func] = (req, res) => res.status(500).json({ 
-      success: false, 
-      message: `Controller not loaded: ${func}` 
+    paymentController[func] = (req, res) => res.status(500).json({
+      success: false,
+      message: `Controller not loaded: ${func}`
     });
   });
 }
@@ -61,6 +62,11 @@ router.get('/test', (req, res) => {
 console.log('=== SETTING UP ROUTES ===');
 
 // 🔒 PAYMENT ROUTES WITH PROPER AUTHENTICATION
+
+// Collector route - protected by collector
+router.get('/payments', collectorProtect, paymentController.getCollectorPayment)
+router.patch('/:id/status', collectorProtect, paymentController.handleUpdateStatus)
+// router.get('/collector/my-payments', adminProtect, authorize(['collector']), paymentController.getCollectorPayment);
 
 // Customer routes - protected by customer auth
 router.post('/process', customerProtect, paymentController.processPayment);

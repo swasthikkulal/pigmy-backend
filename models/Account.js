@@ -63,7 +63,7 @@ const accountSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  
+
   // References
   customerId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -213,8 +213,8 @@ const accountSchema = new mongoose.Schema({
   // Transactions History (linked to Payment model)
   transactions: [transactionSchema]
 
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 // Indexes for better performance
@@ -226,7 +226,7 @@ accountSchema.index({ 'transactions.date': -1 });
 accountSchema.index({ lastPaymentDate: -1 });
 
 // Virtual for progress calculation
-accountSchema.virtual('progress').get(function() {
+accountSchema.virtual('progress').get(function () {
   if (this.maturityAmount && this.maturityAmount > 0) {
     return Math.min((this.totalBalance / this.maturityAmount) * 100, 100);
   }
@@ -234,14 +234,14 @@ accountSchema.virtual('progress').get(function() {
 });
 
 // Virtual for account age in days
-accountSchema.virtual('accountAge').get(function() {
+accountSchema.virtual('accountAge').get(function () {
   const today = new Date();
   const openingDate = new Date(this.openingDate);
   return Math.floor((today - openingDate) / (1000 * 60 * 60 * 24));
 });
 
 // Methods
-accountSchema.methods.addTransactionFromPayment = async function(payment) {
+accountSchema.methods.addTransactionFromPayment = async function (payment) {
   const transaction = {
     paymentId: payment._id,
     date: payment.createdAt,
@@ -259,19 +259,19 @@ accountSchema.methods.addTransactionFromPayment = async function(payment) {
   };
 
   this.transactions.push(transaction);
-  
+
   // Update balance and stats
   if (payment.status === 'completed') {
     this.totalBalance += payment.amount;
     this.totalDeposits += payment.amount;
     this.lastPaymentDate = payment.createdAt;
     this.lastTransaction = payment.createdAt;
-    
+
     // Update payment stats
     this.paymentStats.totalPayments += 1;
     this.paymentStats.successfulPayments += 1;
     this.paymentStats.lastPaymentAmount = payment.amount;
-    
+
     // Calculate average payment amount
     const totalAmount = (this.paymentStats.averagePaymentAmount * (this.paymentStats.successfulPayments - 1)) + payment.amount;
     this.paymentStats.averagePaymentAmount = totalAmount / this.paymentStats.successfulPayments;
@@ -280,7 +280,7 @@ accountSchema.methods.addTransactionFromPayment = async function(payment) {
   return this.save();
 };
 
-accountSchema.methods.calculatePendingAmount = function() {
+accountSchema.methods.calculatePendingAmount = function () {
   const today = new Date();
   const openingDate = new Date(this.openingDate);
   let expectedPayments = 0;
@@ -297,14 +297,14 @@ accountSchema.methods.calculatePendingAmount = function() {
       expectedPayments = Math.max(0, weeksDiff);
       break;
     case 'monthly':
-      const monthsDiff = (today.getFullYear() - openingDate.getFullYear()) * 12 + 
-                        (today.getMonth() - openingDate.getMonth());
+      const monthsDiff = (today.getFullYear() - openingDate.getFullYear()) * 12 +
+        (today.getMonth() - openingDate.getMonth());
       expectedPayments = Math.max(0, monthsDiff);
       break;
   }
 
   // Count completed payment transactions
-  paidPayments = this.transactions.filter(t => 
+  paidPayments = this.transactions.filter(t =>
     t.type === 'deposit' && t.status === 'completed'
   ).length;
 
@@ -320,13 +320,13 @@ accountSchema.methods.calculatePendingAmount = function() {
 };
 
 // Static Methods
-accountSchema.statics.findByCustomer = function(customerId) {
+accountSchema.statics.findByCustomer = function (customerId) {
   return this.find({ customerId })
     .populate('planId collectorId')
     .sort({ createdAt: -1 });
 };
 
-accountSchema.statics.findActiveAccounts = function() {
+accountSchema.statics.findActiveAccounts = function () {
   return this.find({ status: 'active' })
     .populate('customerId', 'name phone')
     .populate('collectorId', 'name area');
