@@ -1,7 +1,567 @@
+const mongoose = require('mongoose');
 const Payment = require('../models/Payment');
 const Account = require('../models/Account');
 const Customer = require('../models/Customer');
+const Withdrawal = require('../models/Withdrawal'); 
 
+
+// In your paymentController.js
+// @desc    Get payments by account ID
+// @route   GET /api/payments/account/:accountId
+// @access  Private
+exports.getPaymentsByAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    
+    const payments = await Payment.find({ accountId })
+      .populate('collectedBy', 'name collectorId')
+      .sort({ paymentDate: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: payments.length,
+      data: payments
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+// Add this to your paymentController.js
+
+// Process withdrawal request
+// Process withdrawal request - FIXED VERSION
+// exports.processWithdrawal = async (req, res) => {
+//     try {
+//         console.log('💰 Process withdrawal called by user:', req.customer?.id || req.user?.id);
+//         console.log('📦 Withdrawal request body:', req.body);
+
+//         const {
+//             accountId, // This might be accountNumber, not MongoDB _id
+//             accountNumber, // Add support for accountNumber
+//             amount,
+//             reason,
+//             type = 'withdrawal',
+//             status = 'pending'
+//         } = req.body;
+
+//         // Validate required fields
+//         if ((!accountId && !accountNumber) || !amount || !reason) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Missing required fields: accountId/accountNumber, amount, reason'
+//             });
+//         }
+
+//         let account;
+
+//         // Try to find account by MongoDB _id first, then by accountNumber
+//         if (accountId && mongoose.Types.ObjectId.isValid(accountId)) {
+//             // If it's a valid MongoDB ObjectId
+//             account = await Account.findById(accountId);
+//         } else if (accountNumber) {
+//             // If accountNumber is provided, find by accountNumber
+//             account = await Account.findOne({ accountNumber: accountNumber || accountId });
+//         } else {
+//             // If accountId is provided but not a valid ObjectId, try as accountNumber
+//             account = await Account.findOne({ accountNumber: accountId });
+//         }
+
+//         if (!account) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Account not found. Please check the account number.'
+//             });
+//         }
+
+//         console.log('✅ Account found:', account.accountNumber, 'Balance:', account.totalBalance);
+
+//         // For customers, verify they own the account
+//         if (req.customer && account.customerId.toString() !== req.customer.id) {
+//             return res.status(403).json({
+//                 success: false,
+//                 message: 'Access denied - account does not belong to you'
+//             });
+//         }
+
+//         // Check if sufficient balance exists
+//         const withdrawalAmount = parseFloat(amount);
+//         if (account.totalBalance < withdrawalAmount) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: `Insufficient balance. Available: ₹${account.totalBalance}, Requested: ₹${withdrawalAmount}`
+//             });
+//         }
+
+//         // Validate minimum withdrawal amount
+//         if (withdrawalAmount <= 0) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Withdrawal amount must be greater than 0'
+//             });
+//         }
+
+//         // Generate reference number
+//         const referenceNumber = `WD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+//         // Determine user type and ID
+//         const createdBy = req.customer?.id || req.user?.id;
+//         const createdByModel = req.customer ? 'Customer' : 'User';
+
+//         console.log('👤 Withdrawal created by:', createdBy, 'Type:', createdByModel);
+
+//         // ✅ CREATE WITHDRAWAL TRANSACTION IN DATABASE
+//         const withdrawal = new Payment({
+//             accountId: account._id, // Use the actual MongoDB _id
+//             customerId: account.customerId,
+//             amount: withdrawalAmount,
+//             paymentMethod: 'withdrawal',
+//             referenceNumber: referenceNumber,
+//             description: `Withdrawal: ${reason}`,
+//             status: status,
+//             type: 'withdrawal',
+//             remarks: reason,
+//             createdBy: createdBy,
+//             createdByModel: createdByModel,
+//             processedAt: new Date()
+//         });
+
+//         // ✅ SAVE TO DATABASE
+//         const savedWithdrawal = await withdrawal.save();
+//         console.log('✅ Withdrawal saved to DB with ID:', savedWithdrawal._id);
+
+//         // ✅ ADD TRANSACTION TO ACCOUNT (as pending)
+//         await Account.findByIdAndUpdate(
+//             account._id,
+//             {
+//                 $push: {
+//                     transactions: {
+//                         date: new Date(),
+//                         amount: -withdrawalAmount, // Negative amount for withdrawal
+//                         type: 'withdrawal',
+//                         paymentMethod: 'withdrawal',
+//                         status: 'pending', // Initially pending
+//                         referenceNumber: referenceNumber,
+//                         description: `Withdrawal: ${reason}`,
+//                         notes: `Withdrawal request - pending approval`
+//                     }
+//                 }
+//             }
+//         );
+
+//         res.json({
+//             success: true,
+//             message: 'Withdrawal request submitted successfully and pending approval',
+//             withdrawalId: savedWithdrawal._id,
+//             referenceNumber: referenceNumber,
+//             status: savedWithdrawal.status,
+//             currentBalance: account.totalBalance,
+//             requestedAmount: withdrawalAmount,
+//             data: {
+//                 ...savedWithdrawal.toObject(),
+//                 accountNumber: account.accountNumber // Include account number in response
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('❌ Withdrawal processing error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error processing withdrawal request',
+//             error: error.message
+//         });
+//     }
+// };
+// Process withdrawal request - FIXED VERSION
+exports.processWithdrawal = async (req, res) => {
+    try {
+        console.log('💰 Process withdrawal called by user:', req.customer?.id || req.user?.id);
+        console.log('📦 Withdrawal request body:', req.body);
+
+        const {
+            accountId, // This might be accountNumber, not MongoDB _id
+            accountNumber, // Add support for accountNumber
+            amount,
+            reason,
+            type = 'withdrawal',
+            status = 'pending',
+            collectorId, // ⭐ ADD THIS - COLLECTOR ID FROM REQUEST
+            customerId   // ⭐ ADD THIS - CUSTOMER ID FROM REQUEST
+        } = req.body;
+
+        // Validate required fields
+        if ((!accountId && !accountNumber) || !amount || !reason) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: accountId/accountNumber, amount, reason'
+            });
+        }
+
+        let account;
+
+        // Try to find account by MongoDB _id first, then by accountNumber
+        if (accountId && mongoose.Types.ObjectId.isValid(accountId)) {
+            // If it's a valid MongoDB ObjectId
+            account = await Account.findById(accountId);
+        } else if (accountNumber) {
+            // If accountNumber is provided, find by accountNumber
+            account = await Account.findOne({ accountNumber: accountNumber || accountId });
+        } else {
+            // If accountId is provided but not a valid ObjectId, try as accountNumber
+            account = await Account.findOne({ accountNumber: accountId });
+        }
+
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: 'Account not found. Please check the account number.'
+            });
+        }
+
+        console.log('✅ Account found:', account.accountNumber, 'Balance:', account.totalBalance);
+        console.log('👥 Collector ID from request:', collectorId); // ⭐ ADD THIS LOG
+
+        // For customers, verify they own the account
+        if (req.customer && account.customerId.toString() !== req.customer.id) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied - account does not belong to you'
+            });
+        }
+
+        // Check if sufficient balance exists
+        const withdrawalAmount = parseFloat(amount);
+        if (account.totalBalance < withdrawalAmount) {
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient balance. Available: ₹${account.totalBalance}, Requested: ₹${withdrawalAmount}`
+            });
+        }
+
+        // Validate minimum withdrawal amount
+        if (withdrawalAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Withdrawal amount must be greater than 0'
+            });
+        }
+
+        // Generate reference number
+        const referenceNumber = `WD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+        // Determine user type and ID
+        const createdBy = req.customer?.id || req.user?.id;
+        const createdByModel = req.customer ? 'Customer' : 'User';
+
+        console.log('👤 Withdrawal created by:', createdBy, 'Type:', createdByModel);
+
+        // ✅ CREATE WITHDRAWAL TRANSACTION IN DATABASE WITH COLLECTOR ID
+        const withdrawal = new Payment({
+            accountId: account._id, // Use the actual MongoDB _id
+            customerId: account.customerId,
+            collectorId: collectorId, // ⭐ ADD THIS LINE - SAVE COLLECTOR ID!
+            amount: withdrawalAmount,
+            paymentMethod: 'withdrawal',
+            referenceNumber: referenceNumber,
+            description: `Withdrawal: ${reason}`,
+            status: status,
+            type: 'withdrawal',
+            remarks: reason,
+            createdBy: createdBy,
+            createdByModel: createdByModel,
+            processedAt: new Date()
+        });
+
+        // ✅ SAVE TO DATABASE
+        const savedWithdrawal = await withdrawal.save();
+        console.log('✅ Withdrawal saved to DB with ID:', savedWithdrawal._id);
+        console.log('💰 Collector ID saved with withdrawal:', savedWithdrawal.collectorId); // ⭐ ADD THIS LOG
+
+        // ✅ ADD TRANSACTION TO ACCOUNT (as pending)
+        await Account.findByIdAndUpdate(
+            account._id,
+            {
+                $push: {
+                    transactions: {
+                        date: new Date(),
+                        amount: -withdrawalAmount, // Negative amount for withdrawal
+                        type: 'withdrawal',
+                        paymentMethod: 'withdrawal',
+                        status: 'pending', // Initially pending
+                        referenceNumber: referenceNumber,
+                        description: `Withdrawal: ${reason}`,
+                        notes: `Withdrawal request - pending approval`,
+                        collectorId: collectorId // ⭐ ADD COLLECTOR ID TO TRANSACTION TOO
+                    }
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            message: 'Withdrawal request submitted successfully and pending approval',
+            withdrawalId: savedWithdrawal._id,
+            referenceNumber: referenceNumber,
+            status: savedWithdrawal.status,
+            currentBalance: account.totalBalance,
+            requestedAmount: withdrawalAmount,
+            data: {
+                ...savedWithdrawal.toObject(),
+                accountNumber: account.accountNumber // Include account number in response
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Withdrawal processing error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error processing withdrawal request',
+            error: error.message
+        });
+    }
+};
+
+// Get withdrawal history
+exports.getWithdrawalHistory = async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        console.log('📖 Fetching withdrawal history for account:', accountId);
+
+        // Verify account exists
+        const account = await Account.findById(accountId);
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: 'Account not found'
+            });
+        }
+
+        // For customers, verify they own the account
+        if (req.customer && account.customerId.toString() !== req.customer.id) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied'
+            });
+        }
+
+        // ✅ FETCH WITHDRAWALS FROM DATABASE
+        const withdrawals = await Payment.find({
+            accountId,
+            type: 'withdrawal'
+        })
+            .sort({ createdAt: -1 })
+            .populate('createdBy', 'name email')
+            .populate('verifiedBy', 'name email');
+
+        console.log('✅ Found', withdrawals.length, 'withdrawals for account');
+
+        res.json({
+            success: true,
+            message: 'Withdrawal history fetched successfully',
+            data: withdrawals,
+            count: withdrawals.length
+        });
+    } catch (error) {
+        console.error('❌ Error fetching withdrawal history:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching withdrawal history',
+            error: error.message
+        });
+    }
+};
+
+// Approve withdrawal (Admin/Collector only)
+exports.approveWithdrawal = async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log('✅ Approving withdrawal:', id);
+
+        // ✅ FIND WITHDRAWAL IN DATABASE
+        const withdrawal = await Payment.findById(id);
+
+        if (!withdrawal) {
+            return res.status(404).json({
+                success: false,
+                message: 'Withdrawal request not found'
+            });
+        }
+
+        if (withdrawal.type !== 'withdrawal') {
+            return res.status(400).json({
+                success: false,
+                message: 'This is not a withdrawal request'
+            });
+        }
+
+        if (withdrawal.status === 'completed') {
+            return res.status(400).json({
+                success: false,
+                message: 'Withdrawal is already approved'
+            });
+        }
+
+        // Check account balance
+        const account = await Account.findById(withdrawal.accountId);
+        if (account.totalBalance < withdrawal.amount) {
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient balance. Available: ₹${account.totalBalance}, Requested: ₹${withdrawal.amount}`
+            });
+        }
+
+        // Update withdrawal status
+        withdrawal.status = 'completed';
+        withdrawal.verifiedBy = req.user?.id || req.collector?.id;
+        withdrawal.verifiedAt = new Date();
+
+        const approvedWithdrawal = await withdrawal.save();
+        console.log('✅ Withdrawal approved:', approvedWithdrawal._id);
+
+        // Update account balance
+        await Account.findByIdAndUpdate(
+            withdrawal.accountId,
+            {
+                $inc: { totalBalance: -withdrawal.amount }
+            }
+        );
+        console.log('💰 Account balance updated after withdrawal approval');
+
+        // Update account transaction status
+        await Account.updateOne(
+            {
+                _id: withdrawal.accountId,
+                'transactions.referenceNumber': withdrawal.referenceNumber
+            },
+            {
+                $set: {
+                    'transactions.$.status': 'completed',
+                    'transactions.$.verifiedBy': req.user?.id || req.collector?.id,
+                    'transactions.$.verifiedAt': new Date()
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            message: 'Withdrawal approved successfully',
+            data: approvedWithdrawal
+        });
+
+    } catch (error) {
+        console.error('❌ Error approving withdrawal:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error approving withdrawal',
+            error: error.message
+        });
+    }
+};
+
+// Reject withdrawal (Admin/Collector only)
+exports.rejectWithdrawal = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        console.log('❌ Rejecting withdrawal:', id);
+
+        const withdrawal = await Payment.findById(id);
+
+        if (!withdrawal) {
+            return res.status(404).json({
+                success: false,
+                message: 'Withdrawal request not found'
+            });
+        }
+
+        if (withdrawal.type !== 'withdrawal') {
+            return res.status(400).json({
+                success: false,
+                message: 'This is not a withdrawal request'
+            });
+        }
+
+        if (withdrawal.status === 'failed') {
+            return res.status(400).json({
+                success: false,
+                message: 'Withdrawal is already rejected'
+            });
+        }
+
+        // Update withdrawal status
+        withdrawal.status = 'failed';
+        withdrawal.remarks = `Rejected: ${reason || 'No reason provided'}`;
+        withdrawal.verifiedBy = req.user?.id || req.collector?.id;
+        withdrawal.verifiedAt = new Date();
+
+        const rejectedWithdrawal = await withdrawal.save();
+        console.log('✅ Withdrawal rejected:', rejectedWithdrawal._id);
+
+        // Update account transaction status
+        await Account.updateOne(
+            {
+                _id: withdrawal.accountId,
+                'transactions.referenceNumber': withdrawal.referenceNumber
+            },
+            {
+                $set: {
+                    'transactions.$.status': 'failed',
+                    'transactions.$.notes': `Rejected: ${reason || 'No reason provided'}`
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            message: 'Withdrawal rejected successfully',
+            data: rejectedWithdrawal
+        });
+
+    } catch (error) {
+        console.error('❌ Error rejecting withdrawal:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error rejecting withdrawal',
+            error: error.message
+        });
+    }
+};
+
+// Get pending withdrawals (Admin/Collector only)
+exports.getPendingWithdrawals = async (req, res) => {
+    try {
+        console.log('⏳ Fetching pending withdrawals');
+
+        const pendingWithdrawals = await Payment.find({
+            type: 'withdrawal',
+            status: 'pending'
+        })
+            .sort({ createdAt: -1 })
+            .populate('accountId', 'accountNumber type totalBalance')
+            .populate('customerId', 'name customerId phone')
+            .populate('createdBy', 'name email');
+
+        console.log('✅ Found', pendingWithdrawals.length, 'pending withdrawals');
+
+        res.json({
+            success: true,
+            message: 'Pending withdrawals fetched successfully',
+            data: pendingWithdrawals,
+            count: pendingWithdrawals.length
+        });
+    } catch (error) {
+        console.error('❌ Error fetching pending withdrawals:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching pending withdrawals',
+            error: error.message
+        });
+    }
+};
 
 // exports.getCollectorPayment = async (req, res) => {
 //     try {
@@ -144,7 +704,7 @@ const Customer = require('../models/Customer');
 exports.getCollectorPayment = async (req, res) => {
     try {
         console.log("🔄 Fetching payments for collector:", req.collector.id);
-        
+
         const findPaymentsByCollector = await Payment.find({ collectorId: req.collector.id })
             .populate('customerId', 'name phone customerId address email') // Populate customer details
             .populate('accountId', 'accountNumber accountType dailyAmount totalBalance openingDate status') // Populate account details
@@ -153,9 +713,9 @@ exports.getCollectorPayment = async (req, res) => {
             .sort({ createdAt: -1 }); // Sort by latest first
 
         if (!findPaymentsByCollector || findPaymentsByCollector.length === 0) {
-            return res.json({ 
-                success: false, 
-                message: "No payments found for this collector" 
+            return res.json({
+                success: false,
+                message: "No payments found for this collector"
             });
         }
 
@@ -172,19 +732,19 @@ exports.getCollectorPayment = async (req, res) => {
             onlinePayments: findPaymentsByCollector.filter(p => p.paymentMethod === 'online').length
         };
 
-        return res.json({ 
-            success: true, 
+        return res.json({
+            success: true,
             data: findPaymentsByCollector,
             stats: stats,
             count: findPaymentsByCollector.length
         });
-        
+
     } catch (error) {
         console.error("❌ Error fetching collector payments:", error);
-        return res.status(500).json({ 
-            success: false, 
+        return res.status(500).json({
+            success: false,
             message: "Internal server error",
-            error: error.message 
+            error: error.message
         });
     }
 }
@@ -216,7 +776,7 @@ exports.getCollectorPayment = async (req, res) => {
 
 //         // Find the payment
 //         const payment = await Payment.findById(id);
-        
+
 //         if (!payment) {
 //             return res.status(404).json({
 //                 success: false,
@@ -233,15 +793,15 @@ exports.getCollectorPayment = async (req, res) => {
 //         }
 
 //         const oldStatus = payment.status;
-        
+
 //         // Update payment status
 //         payment.status = status;
-        
+
 //         // If status changed to completed and it's a collector updating
 //         if (status === 'completed' && oldStatus !== 'completed') {
 //             payment.verifiedBy = req.collector.id;
 //             payment.verifiedAt = new Date();
-            
+
 //             // Update account balance
 //             await Account.findByIdAndUpdate(
 //                 payment.accountId, 
@@ -251,7 +811,7 @@ exports.getCollectorPayment = async (req, res) => {
 //         }
 
 //         const updatedPayment = await payment.save();
-        
+
 //         console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
 
 //         res.json({
@@ -268,7 +828,7 @@ exports.getCollectorPayment = async (req, res) => {
 
 //     } catch (error) {
 //         console.error('❌ Error updating payment status:', error);
-        
+
 //         if (error.name === 'CastError') {
 //             return res.status(400).json({
 //                 success: false,
@@ -301,7 +861,7 @@ exports.handleUpdateStatus = async (req, res) => {
         // Find the payment with account details
         const payment = await Payment.findById(id)
             .populate('accountId');
-        
+
         if (!payment) {
             return res.status(404).json({
                 success: false,
@@ -310,19 +870,19 @@ exports.handleUpdateStatus = async (req, res) => {
         }
 
         const oldStatus = payment.status;
-        
+
         // Update payment status
         payment.status = status;
-        
+
         // If status changed to completed from pending
         if (status === 'completed' && oldStatus === 'pending') {
             payment.verifiedBy = req.collector.id;
             payment.verifiedAt = new Date();
-            
+
             // Update account balance
             await Account.findByIdAndUpdate(
-                payment.accountId, 
-                { 
+                payment.accountId,
+                {
                     $inc: { totalBalance: payment.amount },
                     $push: {
                         transactions: {
@@ -344,8 +904,8 @@ exports.handleUpdateStatus = async (req, res) => {
         // If reverting from completed to pending, remove the transaction and adjust balance
         if (status === 'pending' && oldStatus === 'completed') {
             await Account.findByIdAndUpdate(
-                payment.accountId, 
-                { 
+                payment.accountId,
+                {
                     $inc: { totalBalance: -payment.amount },
                     $pull: {
                         transactions: {
@@ -359,7 +919,7 @@ exports.handleUpdateStatus = async (req, res) => {
         }
 
         const updatedPayment = await payment.save();
-        
+
         console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
 
         res.json({
@@ -598,6 +1158,7 @@ exports.getAllPayments = async (req, res) => {
             .sort({ createdAt: -1 })
             .populate('accountId', 'accountNumber type')
             .populate('customerId', 'name customerId')
+            .populate('collectorId', 'name collectorId')
             .populate('createdBy', 'name email');
 
         console.log('✅ Found', payments.length, 'total payments');
@@ -1030,6 +1591,93 @@ exports.getMonthlySummary = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching monthly summary',
+            error: error.message
+        });
+    }
+};
+
+// Add this to your paymentController.js
+exports.getAllPaymentsByUserId = async (req, res) => {
+    try {
+        const { userid } = req.params;
+        
+        console.log('Fetching all transactions for user:', userid);
+
+        // Get all transactions for this user
+        const transactions = await Payment.find({ customerId: userid })
+            .populate('customerId', 'name customerId phone email')
+            .populate('collectorId', 'name email phone')
+            .sort({ paymentDate: -1, createdAt: -1 });
+
+        console.log(`Found ${transactions.length} transactions for user ${userid}`);
+
+        // Properly separate deposits and withdrawals based on the 'type' field
+        const deposits = transactions.filter(transaction => 
+            transaction.type === 'deposit' || !transaction.type
+        );
+
+        const withdrawals = transactions.filter(transaction => 
+            transaction.type === 'withdrawal'
+        );
+
+        console.log(`Deposits: ${deposits.length}, Withdrawals: ${withdrawals.length}`);
+
+        // Format transactions for frontend - CORRECTLY identify withdrawals
+        const allTransactions = transactions.map(transaction => {
+            const isWithdrawal = transaction.type === 'withdrawal';
+            
+            return {
+                _id: transaction._id,
+                type: isWithdrawal ? 'withdrawal' : 'payment',
+                amount: transaction.amount,
+                date: transaction.paymentDate || transaction.createdAt,
+                status: transaction.status,
+                description: isWithdrawal ? 'Withdrawal' : 'Daily Collection',
+                collector: transaction.collectorId?.name,
+                transactionType: isWithdrawal ? 'debit' : 'credit',
+                reason: transaction.remarks || (isWithdrawal ? 'Customer withdrawal' : ''),
+                paymentMethod: transaction.paymentMethod,
+                originalType: transaction.type // Keep original for debugging
+            };
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Calculate summary
+        const totalDeposits = deposits.reduce((sum, p) => sum + p.amount, 0);
+        const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
+        const currentBalance = totalDeposits - totalWithdrawals;
+
+        const pendingWithdrawals = withdrawals
+            .filter(w => w.status === 'pending')
+            .reduce((sum, w) => sum + w.amount, 0);
+
+        console.log(`Summary - Deposits: ₹${totalDeposits}, Withdrawals: ₹${totalWithdrawals}, Balance: ₹${currentBalance}`);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                payments: deposits,
+                withdrawals: withdrawals, // This should now contain withdrawal transactions
+                allTransactions,
+                summary: {
+                    totalDeposits,
+                    totalWithdrawals,
+                    currentBalance,
+                    pendingWithdrawals,
+                    totalTransactions: transactions.length,
+                    totalPayments: deposits.length,
+                    totalWithdrawalCount: withdrawals.length,
+                    verifiedPayments: deposits.filter(p => p.status === 'verified' || p.status === 'completed').length,
+                    approvedWithdrawals: withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').length,
+                    pendingWithdrawalCount: withdrawals.filter(w => w.status === 'pending').length
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching user payments:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payment data',
             error: error.message
         });
     }

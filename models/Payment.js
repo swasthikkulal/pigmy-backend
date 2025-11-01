@@ -26,12 +26,17 @@ const paymentSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['cash', 'online'],
+        enum: ['cash', 'online', 'withdrawal'], // ADD 'withdrawal' here
         default: 'cash'
+    },
+    type: {
+        type: String,
+        enum: ['deposit', 'withdrawal'], // ADD this field for transaction type
+        default: 'deposit'
     },
     status: {
         type: String,
-        enum: ['pending', 'completed', 'verified'],
+        enum: ['pending', 'completed', 'verified', 'failed'],
         default: 'pending'
     },
     receiptNumber: {
@@ -46,6 +51,19 @@ const paymentSchema = new mongoose.Schema({
     },
     verifiedAt: {
         type: Date
+    },
+    // Add these fields for better tracking
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'createdByModel'
+    },
+    createdByModel: {
+        type: String,
+        enum: ['Customer', 'User', 'Collector']
+    },
+    processedAt: {
+        type: Date,
+        default: Date.now
     }
 }, { timestamps: true });
 

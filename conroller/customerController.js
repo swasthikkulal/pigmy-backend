@@ -1,6 +1,92 @@
 const Customer = require('../models/Customer');
 
 // @desc    Get all customers
+
+// const deleteCustomer = async (req, res) => {
+//     try {
+//         const customerId = req.params.id;
+        
+//         // Find the customer first to check if they exist
+//         const customer = await Customer.findById(customerId);
+        
+//         if (!customer) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Customer not found'
+//             });
+//         }
+
+//         // Check if customer has any active accounts or transactions
+//         const activeAccounts = await Account.countDocuments({ customerId: customerId });
+//         const activePayments = await Payment.countDocuments({ customerId: customerId });
+//         const activeWithdrawals = await Withdrawal.countDocuments({ customerId: customerId });
+
+//         if (activeAccounts > 0 || activePayments > 0 || activeWithdrawals > 0) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Cannot delete customer with active accounts or transaction history. Please deactivate the customer instead.',
+//                 data: {
+//                     activeAccounts,
+//                     activePayments,
+//                     activeWithdrawals
+//                 }
+//             });
+//         }
+
+//         // Delete the customer
+//         await Customer.findByIdAndDelete(customerId);
+
+//         res.status(200).json({
+//             success: true,
+//             message: 'Customer deleted successfully',
+//             data: {
+//                 deletedCustomerId: customerId,
+//                 customerName: customer.name
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('Error deleting customer:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error deleting customer',
+//             error: error.message
+//         });
+//     }
+// };
+const deleteCustomer = async (req, res) => {
+    try {
+        const customerId = req.params.id;
+        
+        // Use findByIdAndDelete for permanent deletion
+        const customer = await Customer.findByIdAndDelete(customerId);
+        
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Customer not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Customer permanently deleted successfully',
+            data: {
+                customerId: customer.customerId,
+                customerName: customer.name
+            }
+        });
+
+    } catch (error) {
+        console.error('Error deleting customer:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting customer',
+            error: error.message
+        });
+    }
+};
+
 // @route   GET /api/customers
 // @access  Public
 const getAllCustomers = async (req, res) => {
@@ -329,5 +415,6 @@ module.exports = {
   getCustomerById,
   createCustomer,
   updateCustomer,
-  updateCustomerSavings
+  updateCustomerSavings,
+  deleteCustomer
 };

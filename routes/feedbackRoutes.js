@@ -1,3 +1,4 @@
+// routes/feedbackRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -6,24 +7,40 @@ const {
     getFeedbackById,
     updateFeedbackStatus,
     getMyFeedback,
-    getFeedbackStats
+    getFeedbackStats,
+    getFeedbackOverview
 } = require('../conroller/feedbackController');
 
 const { protect: adminProtect, authorize } = require('../middleware/authMiddleware');
-const { protect: collectorProtect } = require('../middleware/collectorAuthMiddleware');
 const { protect: customerProtect } = require('../middleware/customerAuthMiddleware');
+const { protect: collectorProtect } = require('../middleware/collectorAuthMiddleware');
+
+// Test endpoint
+router.get('/test-auth', adminProtect, authorize(['admin']), (req, res) => {
+  console.log('✅ Test auth route - Admin authenticated:', req.admin);
+  res.json({
+    success: true,
+    message: 'Authentication successful!',
+    admin: {
+      id: req.admin._id,
+      email: req.admin.email,
+      role: req.admin.role
+    }
+  });
+});
 
 // Customer routes
 router.post('/', customerProtect, createFeedback);
 router.get('/customer/my-feedback', customerProtect, getMyFeedback);
 
-// Collector routes
-router.get('/collector', collectorProtect, getFeedback);
-router.get('/collector/stats', collectorProtect, getFeedbackStats);
+// Collector routes (NEW)
+// router.post('/collector', collectorProtect, createFeedback);
+// router.get('/collector/my-feedback', collectorProtect, getMyFeedback);
 
 // Admin routes
-router.get('/', adminProtect, authorize(['admin']), getFeedback);
-router.get('/:id', adminProtect, authorize(['admin', 'collector']), getFeedbackById);
-router.patch('/:id/status', adminProtect, authorize(['admin', 'collector']), updateFeedbackStatus);
+router.get('/admin/list', adminProtect, authorize(['admin']), getFeedback);
+router.get('/admin/stats/overview', adminProtect, authorize(['admin']), getFeedbackOverview);
+router.get('/admin/:id', adminProtect, authorize(['admin']), getFeedbackById);
+router.patch('/admin/:id/status', adminProtect, authorize(['admin']), updateFeedbackStatus);
 
 module.exports = router;

@@ -1,4 +1,3 @@
-// routes/paymentRoutes.js
 const express = require('express');
 const router = express.Router();
 const { protect: adminProtect, authorize } = require('../middleware/authMiddleware');
@@ -10,22 +9,18 @@ console.log('=== DEBUGGING PAYMENT CONTROLLER ===');
 // Debug the controller import
 let paymentController;
 try {
-  paymentController = require('../conroller/paymentController'); // Make sure path is correct
+  paymentController = require('../conroller/paymentController');
   console.log('✓ Payment controller imported successfully');
-  console.log('Controller object keys:', Object.keys(paymentController));
-
-  // Check each function we need
-  const requiredFunctions = [
-    'processPayment', 'getPaymentHistory', 'getMyPayments', 'getAllPayments',
-    'getPendingPayments', 'getPaymentStats', 'getPaymentById', 'updatePaymentStatus',
-    'verifyPayment', 'deletePayment', 'bulkVerifyPayments', 'bulkCreatePayments',
-    'getDailyCollections', 'getMonthlySummary'
+  
+  // Add withdrawal functions check
+  const withdrawalFunctions = [
+    'processWithdrawal', 'getWithdrawalHistory', 'approveWithdrawal', 
+    'rejectWithdrawal', 'getPendingWithdrawals'
   ];
-
-  requiredFunctions.forEach(func => {
+  
+  withdrawalFunctions.forEach(func => {
     if (typeof paymentController[func] !== 'function') {
-      console.warn(`⚠️ Missing function: ${func}`);
-      // Create a dummy function for missing ones
+      console.warn(`⚠️ Missing withdrawal function: ${func}`);
       paymentController[func] = (req, res) => res.status(501).json({
         success: false,
         message: `Function ${func} not implemented`
@@ -37,24 +32,10 @@ try {
 
 } catch (error) {
   console.log('✗ Error importing payment controller:', error.message);
-  // Create dummy controller as fallback
   paymentController = {};
-  const requiredFunctions = [
-    'processPayment', 'getPaymentHistory', 'getMyPayments', 'getAllPayments',
-    'getPendingPayments', 'getPaymentStats', 'getPaymentById', 'updatePaymentStatus',
-    'verifyPayment', 'deletePayment', 'bulkVerifyPayments', 'bulkCreatePayments',
-    'getDailyCollections', 'getMonthlySummary'
-  ];
-
-  requiredFunctions.forEach(func => {
-    paymentController[func] = (req, res) => res.status(500).json({
-      success: false,
-      message: `Controller not loaded: ${func}`
-    });
-  });
 }
 
-// Test route first
+// Test route
 router.get('/test', (req, res) => {
   res.json({ message: 'Payment routes test - working!' });
 });
@@ -63,17 +44,25 @@ console.log('=== SETTING UP ROUTES ===');
 
 // 🔒 PAYMENT ROUTES WITH PROPER AUTHENTICATION
 
-// Collector route - protected by collector
-router.get('/payments', collectorProtect, paymentController.getCollectorPayment)
-router.patch('/:id/status', collectorProtect, paymentController.handleUpdateStatus)
-// router.get('/collector/my-payments', adminProtect, authorize(['collector']), paymentController.getCollectorPayment);
+// In your payment routes
+router.get('/account/:accountId', adminProtect, authorize(['admin', 'collector']), paymentController.getPaymentsByAccount);
+// Collector routes
+router.get('/payments', collectorProtect, paymentController.getCollectorPayment);
+router.patch('/:id/status', collectorProtect, paymentController.handleUpdateStatus);
 
-// Customer routes - protected by customer auth
+// Customer routes
 router.post('/process', customerProtect, paymentController.processPayment);
 router.get('/customer/my-payments', customerProtect, paymentController.getMyPayments);
 router.get('/account/:accountId/history', customerProtect, paymentController.getPaymentHistory);
 
-// Admin/Collector routes - protected by admin auth
+// 🔥 ADD WITHDRAWAL ROUTES - Customer
+router.post('/withdraw', customerProtect, paymentController.processWithdrawal);
+router.get('/account/:accountId/withdrawals', customerProtect, paymentController.getWithdrawalHistory);
+router.get('/getuserpayments/:userid', customerProtect, paymentController.getAllPaymentsByUserId);
+
+// Admin/Collector routes
+router.get('/getallpayments/:userid', adminProtect, authorize(['admin', 'collector']), paymentController.getAllPaymentsByUserId);
+
 router.get('/', adminProtect, authorize(['admin', 'collector']), paymentController.getAllPayments);
 router.get('/pending', adminProtect, authorize(['admin', 'collector']), paymentController.getPendingPayments);
 router.get('/stats', adminProtect, authorize(['admin', 'collector']), paymentController.getPaymentStats);
@@ -85,6 +74,11 @@ router.post('/bulk/verify', adminProtect, authorize(['admin', 'collector']), pay
 router.post('/bulk/create', adminProtect, authorize(['admin', 'collector']), paymentController.bulkCreatePayments);
 router.get('/reports/daily-collections', adminProtect, authorize(['admin', 'collector']), paymentController.getDailyCollections);
 router.get('/reports/monthly-summary', adminProtect, authorize(['admin']), paymentController.getMonthlySummary);
+
+// 🔥 ADD WITHDRAWAL ROUTES - Admin/Collector
+router.get('/withdrawals/pending', collectorProtect, paymentController.getPendingWithdrawals);
+router.put('/withdrawals/:id/approve', collectorProtect, paymentController.approveWithdrawal);
+router.put('/withdrawals/:id/reject', collectorProtect, paymentController.rejectWithdrawal);
 
 console.log('=== ROUTES SETUP COMPLETE ===');
 

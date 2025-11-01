@@ -5,7 +5,8 @@ const {
     getCustomerById,
     createCustomer,
     updateCustomer,
-    updateCustomerSavings
+    updateCustomerSavings,
+    deleteCustomer
 } = require('../conroller/customerController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -20,9 +21,11 @@ router.route('/')
 
 router.route('/:id')
     .get(getCustomerById)
-    .put(updateCustomer);
+    .put(updateCustomer)
+     .delete(deleteCustomer);
 
 router.route('/:id/savings')
     .patch(updateCustomerSavings);
+
 
 module.exports = router;

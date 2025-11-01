@@ -9,7 +9,8 @@ const {
     getAccountTransactions,
     updateAccountStatus,
     updateAccount,
-    getAccountStats
+    getAccountStats,
+    deleteAccount
 } = require('../conroller/accountController');
 
 const { protect, authorize } = require('../middleware/authMiddleware'); // Admin middleware
@@ -32,7 +33,8 @@ router.route('/stats/overview')
 
 router.route('/:id')
     .get(getAccountById)
-    .put(updateAccount);
+    .put(updateAccount)
+    .delete(deleteAccount);
 
 router.route('/:id/transaction')
     .post(addTransaction);

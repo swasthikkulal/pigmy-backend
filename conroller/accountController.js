@@ -6,9 +6,57 @@ const Plan = require('../models/Plan');
 // @desc    Get all accounts
 // @route   GET /api/accounts
 // @access  Public
+// const getAllAccounts = async (req, res) => {
+//     try {
+//         const { customer, collector, status, page = 1, limit = 10 } = req.query;
+
+//         let query = {};
+
+//         // Filter by customer
+//         if (customer) {
+//             query.customerId = customer;
+//         }
+
+//         // Filter by collector
+//         if (collector) {
+//             query.collectorId = collector;
+//         }
+
+//         // Filter by status
+//         if (status) {
+//             query.status = status;
+//         }
+
+//         const accounts = await Account.find(query)
+//             .populate('customerId', 'name customerId phone email address nomineeName')
+//             .populate('collectorId', 'name collectorId area phone')
+//             .populate('planId', 'name amount interestRate duration')
+//             .sort({ createdAt: -1 })
+//             .limit(limit * 1)
+//             .skip((page - 1) * limit);
+
+//         const total = await Account.countDocuments(query);
+
+//         res.status(200).json({
+//             success: true,
+//             count: accounts.length,
+//             total,
+//             pages: Math.ceil(total / limit),
+//             currentPage: parseInt(page),
+//             data: accounts
+//         });
+//     } catch (error) {
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
+// Update getAllAccounts to exclude deleted accounts by default
 const getAllAccounts = async (req, res) => {
     try {
-        const { customer, collector, status, page = 1, limit = 10 } = req.query;
+        const { customer, collector, status, page = 1, limit = 10, includeDeleted = false } = req.query;
 
         let query = {};
 
@@ -25,6 +73,11 @@ const getAllAccounts = async (req, res) => {
         // Filter by status
         if (status) {
             query.status = status;
+        }
+
+        // Exclude deleted accounts by default
+        if (!includeDeleted) {
+            query.status = { $ne: 'deleted' };
         }
 
         const accounts = await Account.find(query)
@@ -807,6 +860,80 @@ const getAccountStats = async (req, res) => {
         });
     }
 };
+// @desc    Soft delete an account (recommended)
+// @route   DELETE /api/accounts/:id
+// @access  Private/Admin
+// @desc    Force delete account (with transaction handling)
+// @route   DELETE /api/accounts/:id
+// @access  Private/Admin
+const deleteAccount = async (req, res) => {
+  try {
+    const { force } = req.query; // Add force parameter
+    const account = await Account.findById(req.params.id);
+
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found'
+      });
+    }
+
+    // Check if account has transactions or balance
+    const hasTransactions = account.transactions && account.transactions.length > 0;
+    const hasBalance = account.totalBalance > 0;
+
+    if ((hasTransactions || hasBalance) && !force) {
+      return res.status(400).json({
+        success: false,
+        message: 'Account has transaction history or balance',
+        data: {
+          transactionsCount: account.transactions?.length || 0,
+          currentBalance: account.totalBalance,
+          suggestion: 'Use ?force=true to delete anyway, or close the account instead'
+        }
+      });
+    }
+
+    // If force delete, log the action for audit
+    if (force) {
+      console.log(`FORCE DELETING account ${account.accountNumber} with ${account.transactions?.length} transactions and balance ${account.totalBalance}`);
+      
+      // Optional: Create audit log before deletion
+      // await createAuditLog({
+      //   action: 'FORCE_DELETE_ACCOUNT',
+      //   accountId: account._id,
+      //   details: {
+      //     transactionsCount: account.transactions?.length,
+      //     balance: account.totalBalance,
+      //     deletedBy: req.user.id
+      //   }
+      // });
+    }
+
+    await Account.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: force ? 'Account force deleted successfully' : 'Account deleted successfully',
+      data: {
+        deletedAccount: {
+          id: account._id,
+          accountNumber: account.accountNumber,
+          hadTransactions: hasTransactions,
+          hadBalance: hasBalance
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Account deletion error:", error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting account',
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
     getAllAccounts,
@@ -817,5 +944,6 @@ module.exports = {
     getAccountTransactions,
     updateAccountStatus,
     updateAccount,
-    getAccountStats
+    getAccountStats,
+    deleteAccount
 };

@@ -20,7 +20,7 @@ const withdrawalRoutes = require("./routes/withdrawalRoutes");
 const feedbackRoutes = require("./routes/feedbackRoutes");
 const statementRoutes = require("./routes/statementRoutes");
 const collectorAppRoutes = require("./routes/collectorAppRoutes"); // Add this line
-
+const collectorFeedbackRoutes = require('./routes/collectorFeedbackRoutes');
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -52,6 +52,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/statements', statementRoutes);
 
 app.use('/api/setup', setupRoutes);
+app.use('/api/feedback/collector', collectorFeedbackRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
