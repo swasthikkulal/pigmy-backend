@@ -54,6 +54,7 @@ router.patch('/:id/status', collectorProtect, paymentController.handleUpdateStat
 router.post('/process', customerProtect, paymentController.processPayment);
 router.get('/customer/my-payments', customerProtect, paymentController.getMyPayments);
 router.get('/account/:accountId/history', customerProtect, paymentController.getPaymentHistory);
+router.get('/acc/:accountId', adminProtect, paymentController.getPaymentHistory);
 
 // 🔥 ADD WITHDRAWAL ROUTES - Customer
 router.post('/withdraw', customerProtect, paymentController.processWithdrawal);

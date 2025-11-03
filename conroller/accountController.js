@@ -637,11 +637,41 @@ const addTransaction = async (req, res) => {
 // @desc    Get account transactions
 // @route   GET /api/accounts/:id/transactions
 // @access  Public
+// const getAccountTransactions = async (req, res) => {
+//     try {
+//         const account = await Account.findById(req.params.id)
+//             .select('transactions accountNumber accountId')
+//             .populate('transactions.collectedBy', 'name collectorId');
+
+//         if (!account) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Account not found'
+//             });
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             data: {
+//                 accountNumber: account.accountNumber,
+//                 accountId: account.accountId,
+//                 transactions: account.transactions.sort((a, b) => new Date(b.date) - new Date(a.date))
+//             }
+//         });
+//     } catch (error) {
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server Error',
+//             error: error.message
+//         });
+//     }
+// };
 const getAccountTransactions = async (req, res) => {
     try {
         const account = await Account.findById(req.params.id)
-            .select('transactions accountNumber accountId')
-            .populate('transactions.collectedBy', 'name collectorId');
+            .select('transactions accountNumber accountId collectorId')
+            .populate('collectorId', 'name collectorId') // Populate account-level collector
+            .populate('transactions.verifiedBy', 'name collectorId'); // Populate transaction verifier
 
         if (!account) {
             return res.status(404).json({
@@ -650,15 +680,37 @@ const getAccountTransactions = async (req, res) => {
             });
         }
 
+        // Format transactions with collector information
+        const formattedTransactions = account.transactions.map(transaction => {
+            // Use verifiedBy if available, otherwise use account-level collector
+            const collectedBy = transaction.verifiedBy || account.collectorId;
+            
+            return {
+                ...transaction.toObject(),
+                collectedBy: collectedBy ? {
+                    name: collectedBy.name,
+                    collectorId: collectedBy.collectorId
+                } : null
+            };
+        });
+
+        // Sort transactions by date (newest first)
+        const sortedTransactions = formattedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
         res.status(200).json({
             success: true,
             data: {
                 accountNumber: account.accountNumber,
                 accountId: account.accountId,
-                transactions: account.transactions.sort((a, b) => new Date(b.date) - new Date(a.date))
+                collector: account.collectorId ? {
+                    name: account.collectorId.name,
+                    collectorId: account.collectorId.collectorId
+                } : null,
+                transactions: sortedTransactions
             }
         });
     } catch (error) {
+        console.error('Error fetching account transactions:', error);
         res.status(500).json({
             success: false,
             message: 'Server Error',
@@ -666,7 +718,6 @@ const getAccountTransactions = async (req, res) => {
         });
     }
 };
-
 // @desc    Update account status
 // @route   PATCH /api/accounts/:id/status
 // @access  Public

@@ -843,12 +843,116 @@ exports.getCollectorPayment = async (req, res) => {
 //         });
 //     }
 // };
+// exports.handleUpdateStatus = async (req, res) => {
+//     try {
+//         const { id } = req.params;
+//         const { status } = req.body;
+
+//         console.log('🔄 Updating payment status:', { paymentId: id, newStatus: status });
+
+//         // Validate required fields
+//         if (!status) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Status is required"
+//             });
+//         }
+
+//         // Find the payment with account details
+//         const payment = await Payment.findById(id)
+//             .populate('accountId');
+
+//         if (!payment) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Payment not found"
+//             });
+//         }
+
+//         const oldStatus = payment.status;
+
+//         // Update payment status
+//         payment.status = status;
+
+//         // If status changed to completed from pending
+//         if (status === 'completed' && oldStatus === 'pending') {
+//             payment.verifiedBy = req.collector.id;
+//             payment.verifiedAt = new Date();
+
+//             // Update account balance
+//             await Account.findByIdAndUpdate(
+//                 payment.accountId,
+//                 {
+//                     $inc: { totalBalance: payment.amount },
+//                     $push: {
+//                         transactions: {
+//                             date: new Date(),
+//                             amount: payment.amount,
+//                             type: 'deposit',
+//                             paymentMethod: payment.paymentMethod,
+//                             status: 'completed',
+//                             referenceNumber: payment.referenceNumber,
+//                             description: `Payment verified by collector - ${payment.referenceNumber}`,
+//                             verifiedBy: req.collector.id
+//                         }
+//                     }
+//                 }
+//             );
+//             console.log('💰 Account balance updated and transaction added');
+//         }
+
+//         // If reverting from completed to pending, remove the transaction and adjust balance
+//         if (status === 'pending' && oldStatus === 'completed') {
+//             await Account.findByIdAndUpdate(
+//                 payment.accountId,
+//                 {
+//                     $inc: { totalBalance: -payment.amount },
+//                     $pull: {
+//                         transactions: {
+//                             referenceNumber: payment.referenceNumber,
+//                             status: 'completed'
+//                         }
+//                     }
+//                 }
+//             );
+//             console.log('💰 Account balance adjusted and transaction removed');
+//         }
+
+//         const updatedPayment = await payment.save();
+
+//         console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
+
+//         res.json({
+//             success: true,
+//             message: `Payment status updated to ${status}`,
+//             data: {
+//                 _id: updatedPayment._id,
+//                 status: updatedPayment.status,
+//                 previousStatus: oldStatus,
+//                 amount: updatedPayment.amount,
+//                 accountId: updatedPayment.accountId
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('❌ Error updating payment status:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: "Internal server error while updating payment status",
+//             error: error.message
+//         });
+//     }
+// };
 exports.handleUpdateStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, remarks } = req.body; // Add remarks here
 
-        console.log('🔄 Updating payment status:', { paymentId: id, newStatus: status });
+        console.log('🔄 Updating payment status:', { 
+            paymentId: id, 
+            newStatus: status,
+            remarks: remarks 
+        });
 
         // Validate required fields
         if (!status) {
@@ -871,8 +975,14 @@ exports.handleUpdateStatus = async (req, res) => {
 
         const oldStatus = payment.status;
 
-        // Update payment status
+        // Update payment status AND remarks
         payment.status = status;
+        
+        // Only update remarks if provided (for rejections)
+        if (remarks) {
+            payment.remarks = remarks;
+            console.log('📝 Remarks added to payment:', remarks);
+        }
 
         // If status changed to completed from pending
         if (status === 'completed' && oldStatus === 'pending') {
@@ -921,6 +1031,9 @@ exports.handleUpdateStatus = async (req, res) => {
         const updatedPayment = await payment.save();
 
         console.log(`✅ Payment status updated from ${oldStatus} to ${updatedPayment.status}`);
+        if (remarks) {
+            console.log(`📝 Remarks saved: ${updatedPayment.remarks}`);
+        }
 
         res.json({
             success: true,
@@ -930,7 +1043,8 @@ exports.handleUpdateStatus = async (req, res) => {
                 status: updatedPayment.status,
                 previousStatus: oldStatus,
                 amount: updatedPayment.amount,
-                accountId: updatedPayment.accountId
+                accountId: updatedPayment.accountId,
+                remarks: updatedPayment.remarks // Include remarks in response
             }
         });
 
