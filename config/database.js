@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    await mongoose.connect("mongodb://127.0.0.1:27017/pigmy", {
+    await mongoose.connect("mongodb+srv://swasthik126_db_user:swasthik126_db_user@instagram.xnjjk94.mongodb.net/?appName=instagram", {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
